@@ -9,11 +9,12 @@ import {
 } from "@earendil-works/pi-coding-agent";
 import {
   Container,
+  decodeKittyPrintable,
+  matchesKey,
   type SelectItem,
   SelectList,
   Text,
   truncateToWidth,
-  wrapTextWithAnsi,
 } from "@earendil-works/pi-tui";
 
 interface RiskRule {
@@ -45,6 +46,7 @@ interface SessionSettings {
 type RuleScope = "session" | "project" | "global";
 
 const ENTRY_TYPE = "simply-permission-gate-settings";
+const APPROVAL_WIDGET_KEY = "simply-permission-gate-approval";
 const GLOBAL_CONFIG_PATH = join(getAgentDir(), "permission-gate.json");
 
 const DEFAULT_RULES: RiskRule[] = [
@@ -430,87 +432,72 @@ export default function permissionGate(pi: ExtensionAPI) {
     pi.events.emit("herdr:blocked", { active: true, label: "Waiting for command approval" });
     try {
       if (ctx.mode === "tui") {
-        const choices = [
-          { value: "once" as const, label: "Allow once" },
-          { value: "session" as const, label: "Allow this exact command for this session" },
-          { value: "deny" as const, label: "Deny" },
-        ];
-        const decision = await ctx.ui.custom<"once" | "session" | "deny">(
-          (tui, theme, keybindings, done) => {
-            let selectedIndex = 0;
-            let commandOffset = 0;
-            let maxCommandOffset = 0;
-            const visibleCommandLines = 4;
-
-            return {
-              render(width: number): string[] {
-                const contentWidth = Math.max(20, width - 4);
-                const wrapped = command
-                  .split("\n")
-                  .flatMap((line) => wrapTextWithAnsi(line || " ", contentWidth));
-                maxCommandOffset = Math.max(0, wrapped.length - visibleCommandLines);
-                commandOffset = Math.min(commandOffset, maxCommandOffset);
-                const end = Math.min(wrapped.length, commandOffset + visibleCommandLines);
-                const lines = [
-                  theme.fg("warning", theme.bold("Permission required")),
-                  theme.fg("muted", risks.join(", ")),
-                  "",
-                  theme.fg(
-                    "dim",
-                    `Command${wrapped.length > visibleCommandLines ? ` · lines ${commandOffset + 1}-${end} of ${wrapped.length}` : ""}`,
-                  ),
-                  ...wrapped
-                    .slice(commandOffset, end)
-                    .map((line, index) =>
-                      theme.fg("toolOutput", `${commandOffset + index === 0 ? "$ " : "  "}${line}`),
-                    ),
-                  "",
-                  ...choices.map((choice, index) =>
-                    index === selectedIndex
-                      ? theme.fg("accent", `→ ${choice.label}`)
-                      : theme.fg("text", `  ${choice.label}`),
-                  ),
-                  "",
-                  theme.fg(
-                    "dim",
-                    "↑↓ choose · pgup/pgdn scroll command · enter select · esc deny",
-                  ),
-                ];
-                return lines.map((line) => truncateToWidth(line, width, ""));
-              },
-              handleInput(data: string): void {
-                if (keybindings.matches(data, "tui.select.up") || data === "k") {
-                  selectedIndex = Math.max(0, selectedIndex - 1);
-                } else if (keybindings.matches(data, "tui.select.down") || data === "j") {
-                  selectedIndex = Math.min(choices.length - 1, selectedIndex + 1);
-                } else if (keybindings.matches(data, "tui.select.pageUp")) {
-                  commandOffset = Math.max(0, commandOffset - visibleCommandLines);
-                } else if (keybindings.matches(data, "tui.select.pageDown")) {
-                  commandOffset = Math.min(maxCommandOffset, commandOffset + visibleCommandLines);
-                } else if (keybindings.matches(data, "tui.select.confirm") || data === "\n") {
-                  done(choices[selectedIndex]?.value ?? "deny");
-                  return;
-                } else if (keybindings.matches(data, "tui.select.cancel")) {
-                  done("deny");
-                  return;
-                }
-                tui.requestRender();
-              },
-              invalidate(): void {},
+        let stopListening: (() => void) | undefined;
+        ctx.ui.setWorkingVisible(false);
+        try {
+          return await new Promise<"once" | "session" | "deny">((resolve) => {
+            let settled = false;
+            const finish = (decision: "once" | "session" | "deny") => {
+              if (settled) return;
+              settled = true;
+              resolve(decision);
             };
-          },
-          {
-            overlay: true,
-            overlayOptions: {
-              anchor: "center",
-              width: "90%",
-              minWidth: 50,
-              maxHeight: "70%",
-              margin: 1,
-            },
-          },
-        );
-        return decision ?? "deny";
+
+            stopListening = ctx.ui.onTerminalInput((data) => {
+              const printable = decodeKittyPrintable(data) ?? (data.length === 1 ? data : undefined);
+              if (printable === "1") finish("once");
+              else if (printable === "2") finish("session");
+              else if (printable === "3" || matchesKey(data, "escape") || matchesKey(data, "ctrl+c")) {
+                finish("deny");
+              }
+              // Keep approval keystrokes out of the editor. Native terminal
+              // scrollback remains independent and does not arrive here.
+              return { consume: true };
+            });
+
+            ctx.ui.setWidget(
+              APPROVAL_WIDGET_KEY,
+              (_tui, theme) => ({
+                render(width: number): string[] {
+                  const normalizedCommand = command.replace(/\s+/g, " ").trim();
+                  const border = theme.fg("borderAccent", "─".repeat(Math.max(0, width)));
+                  const choices =
+                    theme.fg("accent", "[1] Allow once") +
+                    theme.fg("muted", "  ·  ") +
+                    theme.fg("accent", "[2] Allow exact command for session") +
+                    theme.fg("muted", "  ·  ") +
+                    theme.fg("error", "[3] Deny");
+                  return [
+                    border,
+                    truncateToWidth(
+                      theme.fg("warning", theme.bold("Permission required")) +
+                        theme.fg("muted", ` · ${risks.join(", ")}`),
+                      width,
+                      "",
+                    ),
+                    truncateToWidth(theme.fg("toolOutput", `$ ${normalizedCommand}`), width, "…"),
+                    truncateToWidth(choices, width, ""),
+                    truncateToWidth(
+                      theme.fg(
+                        "dim",
+                        "Scroll through the transcript, return to the bottom, then press 1, 2, or 3 · esc denies",
+                      ),
+                      width,
+                      "",
+                    ),
+                    border,
+                  ];
+                },
+                invalidate(): void {},
+              }),
+              { placement: "belowEditor" },
+            );
+          });
+        } finally {
+          stopListening?.();
+          ctx.ui.setWidget(APPROVAL_WIDGET_KEY, undefined);
+          ctx.ui.setWorkingVisible(true);
+        }
       }
 
       const choice = await ctx.ui.select(

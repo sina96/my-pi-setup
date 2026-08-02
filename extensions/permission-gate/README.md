@@ -229,19 +229,25 @@ Restore the gate or inspect its state:
 is enabled. It does not modify global or project configuration. Plan mode and
 review mode still enforce their own independent read-only restrictions.
 
-## Approval dialog and long commands
+## Approval prompt and transcript scrolling
 
-In TUI mode, approvals use a bounded overlay so a long command cannot push the
-entire conversation off screen. The overlay shows four wrapped command lines at
-a time. Use **Page Up** and **Page Down** to inspect the rest before deciding;
-the line counter shows the current range. Arrow keys continue to select the
-approval action, Enter confirms it, and Escape denies it.
+In TUI mode, approval is a compact widget below the editor instead of a centered
+modal. It does not take focus, and the animated working row is paused while Pi
+waits. The full tool call remains in the transcript, so you can scroll up to
+inspect the command and surrounding code, then return to the bottom and choose:
 
-Terminal scrollback while a focused Pi selector is open can snap back to the
-active dialog because Pi owns and redraws the terminal viewport. This behavior
-is in Pi's inline TUI interaction rather than the permission rule matching, and
-is not specific to Ghostty. The bounded overlay and internal command scrolling
-avoid relying on terminal scrollback during approval.
+```text
+[1] Allow once
+[2] Allow this exact command for the session
+[3] Deny
+```
+
+Escape and Ctrl+C also deny. Approval input is consumed so it is not inserted
+into the editor. Native terminal scrollback does not trigger a Pi rerender, which
+avoids the old snap-to-dialog behavior. If a terminal is configured to send
+wheel events to applications instead of opening scrollback, use its native
+scrollback modifier (commonly Shift while scrolling); this is terminal behavior
+outside the extension API.
 
 ## Exact-command approvals
 
