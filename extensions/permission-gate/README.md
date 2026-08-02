@@ -45,7 +45,33 @@ A later rule with the same ID replaces an earlier rule. A config file can remove
 an inherited rule by listing its ID under `disabledRules`.
 
 Config changes are loaded on session startup, session tree navigation, or
-`/reload`.
+`/reload`. Rules added through commands become active immediately.
+
+### Commands for every scope
+
+Use the same command shape for session, project, and global rules:
+
+```text
+/permission-gate rule add <scope> <id> <label> :: <regex>
+/permission-gate rule remove <scope> <id>
+```
+
+`<scope>` is `session`, `project`, or `global`. If omitted, it defaults to
+`session` for backwards compatibility.
+
+```text
+# Current session branch only
+/permission-gate rule add session all-git All Git operations :: \bgit\b
+
+# Current trusted project; writes .pi/permission-gate.json
+/permission-gate rule add project production-deploy Production deployment :: \bdeploy\s+production\b
+
+# Every project; writes ~/.pi/agent/permission-gate.json
+/permission-gate rule add global all-git All Git operations :: \bgit\b
+```
+
+Rules added by command are case-insensitive. Edit the JSON directly when you
+need other regex flags or want to use `disabledRules`.
 
 ### Global rules
 
@@ -66,7 +92,12 @@ Create `~/.pi/agent/permission-gate.json` to apply rules in every project:
 ```
 
 This example removes the built-in package-publication rule and adds a prompt for
-any command containing the `git` token.
+any command containing the `git` token. You can produce the same added rule
+without manually editing JSON:
+
+```text
+/permission-gate rule add global all-git-operations All Git operations :: \bgit\b
+```
 
 ### Directory/project rules
 
@@ -88,6 +119,32 @@ Create `.pi/permission-gate.json` in a project:
 Project config is read only after the project is trusted. Commit this file when
 the policy should be shared with the project. Add it to `.gitignore` when it is
 only for your local checkout.
+
+The command equivalent is:
+
+```text
+/permission-gate rule add project production-deploy Production deployment :: \bdeploy\s+(?:--env[= ]|)(?:prod|production)\b
+```
+
+### Ask the agent to configure it
+
+You do not need to write the JSON or regular expressions yourself. Ask the agent
+to inspect the commands you want protected, propose a narrowly scoped regex,
+and update the global or project config. For example:
+
+```text
+Add a project permission-gate rule for terraform apply and terraform destroy.
+Show me the regex and config change before finishing.
+```
+
+```text
+Update my global permission-gate policy so every kubectl delete requires
+approval. Preserve all existing rules.
+```
+
+The agent can edit `.pi/permission-gate.json` or
+`~/.pi/agent/permission-gate.json` directly. Review the resulting regex because
+permission rules are guardrails rather than a complete shell parser.
 
 ### Updating or disabling a built-in rule
 
@@ -123,23 +180,23 @@ escaped, so regex `\bgit\b` is written as `"\\bgit\\b"`.
 Session rules are stored in the Pi session branch and do not modify global or
 project files.
 
-Add a case-insensitive rule with:
+For example, require approval for every Git operation in the current session:
 
 ```text
-/permission-gate rule add <id> <label> :: <regex>
+/permission-gate rule add session all-git All Git operations :: \bgit\b
 ```
 
-For example, require approval for every Git operation in the current session:
+The shorter form still defaults to session scope:
 
 ```text
 /permission-gate rule add all-git All Git operations :: \bgit\b
 ```
 
-List active rules or remove a session rule:
+Open the interactive rule browser or remove the session rule:
 
 ```text
 /permission-gate rule list
-/permission-gate rule remove all-git
+/permission-gate rule remove session all-git
 ```
 
 Session rules can replace a configured rule by using the same ID. The original

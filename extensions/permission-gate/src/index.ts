@@ -1,5 +1,5 @@
-import { readFile } from "node:fs/promises";
-import { join } from "node:path";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { dirname, join } from "node:path";
 import {
   CONFIG_DIR_NAME,
   getAgentDir,
@@ -30,6 +30,8 @@ interface SessionSettings {
   yoloMode?: boolean;
   rules?: StoredRule[];
 }
+
+type RuleScope = "session" | "project" | "global";
 
 const ENTRY_TYPE = "simply-permission-gate-settings";
 const GLOBAL_CONFIG_PATH = join(getAgentDir(), "permission-gate.json");
@@ -198,6 +200,34 @@ function storedRule(rule: RiskRule): StoredRule {
   };
 }
 
+async function editRuleFile(
+  path: string,
+  transform: (rules: unknown[]) => { rules: unknown[]; changed: boolean },
+): Promise<boolean> {
+  let config: Record<string, unknown> = {};
+  try {
+    const parsed = JSON.parse(await readFile(path, "utf8")) as unknown;
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+      throw new Error("top level must be a JSON object");
+    }
+    config = parsed as Record<string, unknown>;
+  } catch (error) {
+    if ((error as { code?: string }).code !== "ENOENT") throw error;
+  }
+
+  if (config.rules !== undefined && !Array.isArray(config.rules)) {
+    throw new Error("rules must be an array before it can be edited");
+  }
+
+  const existingRules = Array.isArray(config.rules) ? config.rules : [];
+  const result = transform(existingRules);
+  if (!result.changed) return false;
+  config.rules = result.rules;
+  await mkdir(dirname(path), { recursive: true });
+  await writeFile(path, `${JSON.stringify(config, null, 2)}\n`, "utf8");
+  return true;
+}
+
 export default function permissionGate(pi: ExtensionAPI) {
   const sessionApprovals = new Set<string>();
   const sessionRules = new Map<string, RiskRule>();
@@ -256,6 +286,58 @@ export default function permissionGate(pi: ExtensionAPI) {
     return allRules()
       .filter((rule) => rule.pattern.test(command))
       .map((rule) => rule.label);
+  }
+
+  function configPathForScope(scope: Exclude<RuleScope, "session">, ctx: ExtensionContext): string {
+    if (scope === "global") return GLOBAL_CONFIG_PATH;
+    if (!ctx.isProjectTrusted()) {
+      throw new Error("Project rules can only be changed after this project is trusted");
+    }
+    return join(ctx.cwd, CONFIG_DIR_NAME, "permission-gate.json");
+  }
+
+  async function showRuleList(ctx: ExtensionContext): Promise<void> {
+    const order: Record<RiskRule["source"], number> = {
+      default: 0,
+      global: 1,
+      project: 2,
+      session: 3,
+    };
+    const rules = allRules().sort(
+      (left, right) =>
+        order[left.source] - order[right.source] || left.label.localeCompare(right.label),
+    );
+    const counts = rules.reduce<Record<string, number>>((result, rule) => {
+      result[rule.source] = (result[rule.source] ?? 0) + 1;
+      return result;
+    }, {});
+    const summary = ["default", "global", "project", "session"]
+      .filter((source) => counts[source])
+      .map((source) => `${source}: ${counts[source]}`)
+      .join(" · ");
+    const options = rules.map(
+      (rule) => `${rule.source.toUpperCase().padEnd(7)} │ ${rule.label}  (${rule.id})`,
+    );
+
+    if (!ctx.hasUI) {
+      ctx.ui.notify(
+        `Permission-gate rules (${rules.length})\n${summary}\n\n${options.join("\n")}`,
+        "info",
+      );
+      return;
+    }
+
+    const selected = await ctx.ui.select(
+      `Permission-gate rules · ${rules.length} active\n${summary}\n\nSelect a rule to inspect`,
+      options,
+    );
+    if (!selected) return;
+    const rule = rules[options.indexOf(selected)];
+    if (!rule) return;
+    await ctx.ui.select(
+      `${rule.label}\n\nScope:   ${rule.source}\nID:      ${rule.id}\nPattern: /${rule.pattern.source}/${rule.pattern.flags}`,
+      ["Close"],
+    );
   }
 
   async function askPermission(
@@ -370,42 +452,91 @@ export default function permissionGate(pi: ExtensionAPI) {
       }
 
       if (action === "rule") {
-        const addMatch = rest.match(/^add\s+([a-z0-9][a-z0-9._-]*)\s+(.+?)\s+::\s+(.+)$/i);
-        if (addMatch) {
-          const [, id, label, pattern] = addMatch;
-          const result = compileRule({ id, label, pattern, flags: "i" }, "session");
-          if (!result.rule) {
-            ctx.ui.notify(result.error ?? "Invalid session rule", "warning");
-            return;
-          }
-          sessionRules.set(id, result.rule);
-          persistSessionSettings();
-          ctx.ui.notify(`Session rule added: ${id} · ${label}`, "info");
-          return;
-        }
-
-        const removeMatch = rest.match(/^remove\s+([a-z0-9][a-z0-9._-]*)$/i);
-        if (removeMatch) {
-          const id = removeMatch[1];
-          if (!sessionRules.delete(id)) {
-            ctx.ui.notify(`No session rule named ${id}`, "warning");
-            return;
-          }
-          persistSessionSettings();
-          ctx.ui.notify(`Session rule removed: ${id}`, "info");
-          return;
-        }
-
         if (rest.toLowerCase() === "list") {
-          const lines = allRules().map(
-            (rule) => `${rule.id} [${rule.source}] · ${rule.label} · /${rule.pattern.source}/${rule.pattern.flags}`,
-          );
-          ctx.ui.notify(lines.join("\n"), "info");
+          await showRuleList(ctx);
+          return;
+        }
+
+        const addMatch = rest.match(
+          /^add\s+(?:(session|project|global)\s+)?([a-z0-9][a-z0-9._-]*)\s+(.+?)\s+::\s+(.+)$/i,
+        );
+        if (addMatch) {
+          const scope = (addMatch[1]?.toLowerCase() ?? "session") as RuleScope;
+          const [, , id, label, pattern] = addMatch;
+          const result = compileRule({ id, label, pattern, flags: "i" }, scope);
+          if (!result.rule) {
+            ctx.ui.notify(result.error ?? "Invalid rule", "warning");
+            return;
+          }
+
+          if (scope === "session") {
+            sessionRules.set(id, result.rule);
+            persistSessionSettings();
+            ctx.ui.notify(`Session rule added: ${id} · ${label}`, "info");
+            return;
+          }
+
+          try {
+            const path = configPathForScope(scope, ctx);
+            const value = storedRule(result.rule);
+            await editRuleFile(path, (rules) => ({
+              rules: [
+                ...rules.filter(
+                  (rule) =>
+                    !rule || typeof rule !== "object" || (rule as { id?: unknown }).id !== id,
+                ),
+                value,
+              ],
+              changed: true,
+            }));
+            await loadConfiguredRules(ctx);
+            ctx.ui.notify(`${scope === "global" ? "Global" : "Project"} rule saved: ${id}\n${path}`, "info");
+          } catch (error) {
+            ctx.ui.notify(`Could not save ${scope} rule: ${(error as Error).message}`, "warning");
+          }
+          return;
+        }
+
+        const removeMatch = rest.match(
+          /^remove\s+(?:(session|project|global)\s+)?([a-z0-9][a-z0-9._-]*)$/i,
+        );
+        if (removeMatch) {
+          const scope = (removeMatch[1]?.toLowerCase() ?? "session") as RuleScope;
+          const id = removeMatch[2];
+
+          if (scope === "session") {
+            if (!sessionRules.delete(id)) {
+              ctx.ui.notify(`No session rule named ${id}`, "warning");
+              return;
+            }
+            persistSessionSettings();
+            ctx.ui.notify(`Session rule removed: ${id}`, "info");
+            return;
+          }
+
+          try {
+            const path = configPathForScope(scope, ctx);
+            const changed = await editRuleFile(path, (rules) => {
+              const filtered = rules.filter(
+                (rule) =>
+                  !rule || typeof rule !== "object" || (rule as { id?: unknown }).id !== id,
+              );
+              return { rules: filtered, changed: filtered.length !== rules.length };
+            });
+            if (!changed) {
+              ctx.ui.notify(`No ${scope} rule named ${id}`, "warning");
+              return;
+            }
+            await loadConfiguredRules(ctx);
+            ctx.ui.notify(`${scope === "global" ? "Global" : "Project"} rule removed: ${id}`, "info");
+          } catch (error) {
+            ctx.ui.notify(`Could not remove ${scope} rule: ${(error as Error).message}`, "warning");
+          }
           return;
         }
 
         ctx.ui.notify(
-          "Usage: /permission-gate rule [list|add <id> <label> :: <regex>|remove <id>]",
+          "Usage: /permission-gate rule [list|add [session|project|global] <id> <label> :: <regex>|remove [session|project|global] <id>]",
           "warning",
         );
         return;
