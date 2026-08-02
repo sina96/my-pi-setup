@@ -1,38 +1,9 @@
-// Adapted and substantially simplified from mitsuhiko/agent-stuff's whimsical.ts.
-// Local changes: curated messages, session toggle, persistence, and no-repeat selection.
+// Adapted from mitsuhiko/agent-stuff's whimsical.ts.
+// Local changes: first-turn/follow-up pools, session toggle, persistence, and no-repeat selection.
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
+import { FIRST_TURN_MESSAGES, FOLLOW_UP_MESSAGES } from "./messages.ts";
 
 const ENTRY_TYPE = "simply-whimsical-settings";
-
-const FIRST_TURN = [
-  "Reading the room…",
-  "Mapping the codebase…",
-  "Finding the right thread…",
-  "Inspecting before editing…",
-  "Checking the sharp edges…",
-  "Getting the lay of the land…",
-];
-
-const FOLLOW_UP = [
-  "Following the data flow…",
-  "Connecting the dots…",
-  "Checking assumptions…",
-  "Tracing the ripple effects…",
-  "Keeping the diff honest…",
-  "Looking for the smallest fix…",
-  "Consulting the stack trace…",
-  "Untangling the types…",
-  "Negotiating with the compiler…",
-  "Asking the tests politely…",
-  "Herding edge cases…",
-  "Polishing the implementation…",
-  "Counting the semicolons…",
-  "Recombobulating…",
-  "Taming the toolchain…",
-  "Making the boring thing work…",
-  "Checking one more thing…",
-  "Following the evidence…",
-];
 
 export default function whimsical(pi: ExtensionAPI) {
   let enabled = true;
@@ -48,7 +19,8 @@ export default function whimsical(pi: ExtensionAPI) {
   }
 
   function choose(turnIndex: number): string {
-    const pool = turnIndex === 0 ? FIRST_TURN : FOLLOW_UP;
+    const pool: readonly string[] =
+      turnIndex === 0 ? FIRST_TURN_MESSAGES : FOLLOW_UP_MESSAGES;
     const candidates = pool.filter((message) => message !== previous);
     const message = candidates[Math.floor(Math.random() * candidates.length)] ?? pool[0];
     previous = message;
@@ -67,7 +39,7 @@ export default function whimsical(pi: ExtensionAPI) {
   });
 
   pi.registerCommand("whimsy", {
-    description: "Toggle focused, playful working messages for this session",
+    description: "Toggle playful working messages for this session",
     handler: async (args, ctx) => {
       const action = args.trim().toLowerCase();
       if (action === "on") enabled = true;

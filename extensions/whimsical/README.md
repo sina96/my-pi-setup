@@ -1,12 +1,12 @@
 # simply-whimsical
 
-A restrained version of Armin Ronacher's Apache-2.0
+An expanded adaptation of Armin Ronacher's Apache-2.0
 [`whimsical.ts`](https://raw.githubusercontent.com/mitsuhiko/agent-stuff/refs/heads/main/extensions/whimsical.ts).
 
-It replaces Pi's working message with a small set of coding-focused, lightly
-playful phrases. This local version uses roughly two dozen curated messages
-instead of hundreds, avoids immediate repeats, and uses calmer first-turn text
-while the agent is still inspecting the project.
+It replaces Pi's working message with hundreds of playful phrases from the
+upstream collection. This version keeps a separate pool of fun, exploratory
+first-turn messages, uses the full collection for follow-up turns, and avoids
+immediate repeats.
 
 ```text
 /whimsy          Toggle for the current session branch

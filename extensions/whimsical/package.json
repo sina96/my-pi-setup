@@ -2,7 +2,7 @@
   "name": "simply-whimsical",
   "version": "0.1.0",
   "private": true,
-  "description": "Focused, lightly playful working messages for Pi",
+  "description": "A large, playful collection of working messages for Pi",
   "keywords": ["pi-package", "pi-extension", "ui", "working-message"],
   "license": "Apache-2.0",
   "peerDependencies": {
