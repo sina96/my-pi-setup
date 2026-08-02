@@ -2,7 +2,7 @@
   "name": "simply-theme-picker",
   "version": "0.1.0",
   "private": true,
-  "description": "A fuzzy, live-preview theme picker for Pi",
+  "description": "A fuzzy theme picker with an isolated popup preview for Pi",
   "keywords": ["pi-package", "pi-extension", "theme", "picker"],
   "license": "MIT",
   "peerDependencies": {

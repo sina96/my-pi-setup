@@ -1,17 +1,9 @@
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
-import { DynamicBorder, getAgentDir } from "@earendil-works/pi-coding-agent";
-import {
-  Container,
-  decodeKittyPrintable,
-  fuzzyFilter,
-  Key,
-  matchesKey,
-  SelectList,
-  Text,
-  type SelectItem,
-} from "@earendil-works/pi-tui";
+import { getAgentDir } from "@earendil-works/pi-coding-agent";
+import { fuzzyFilter } from "@earendil-works/pi-tui";
+import { ThemePreviewPicker } from "./theme-preview-picker.ts";
 
 function saveTheme(name: string): string | undefined {
   const path = join(getAgentDir(), "settings.json");
@@ -29,13 +21,6 @@ function saveTheme(name: string): string | undefined {
   } catch (error) {
     return error instanceof Error ? error.message : String(error);
   }
-}
-
-function printableInput(data: string): string | undefined {
-  const kitty = decodeKittyPrintable(data);
-  if (kitty) return kitty;
-  if (data.length === 1 && data >= " " && data !== "\x7f") return data;
-  return undefined;
 }
 
 export default function themePicker(pi: ExtensionAPI) {
@@ -73,129 +58,31 @@ export default function themePicker(pi: ExtensionAPI) {
     }
 
     const originalName = ctx.ui.theme.name ?? activeTheme;
-    const originalTheme = originalName ? ctx.ui.getTheme(originalName) : undefined;
-
-    const selected = await ctx.ui.custom<string | undefined>((tui, theme, kb, done) => {
-      const container = new Container();
-      const themeCache = new Map<string, NonNullable<ReturnType<typeof ctx.ui.getTheme>>>();
-      let query = "";
-      let preferred = activeTheme;
-      let previewed = activeTheme;
-      let list: SelectList | undefined;
-
-      function items(): SelectItem[] {
-        return fuzzyFilter(themeNames, query, (name) => name).map((name) => ({
-          value: name,
-          label: name === originalName ? `${name} (active)` : name,
-        }));
-      }
-
-      function preview(name: string): void {
-        if (name === previewed) return;
-        let candidate = themeCache.get(name);
-        if (!candidate) {
-          candidate = ctx.ui.getTheme(name);
-          if (candidate) themeCache.set(name, candidate);
-        }
-        if (!candidate) return;
-        ctx.ui.setTheme(candidate);
-        previewed = name;
-        preferred = name;
-      }
-
-      function rebuild(previewFirst = false): void {
-        const available = items();
-        const queryLabel = query ? theme.fg("muted", ` · search: ${query}`) : "";
-        const previewLabel = previewed ? theme.fg("muted", ` · preview: ${previewed}`) : "";
-
-        container.clear();
-        container.addChild(new DynamicBorder((text) => theme.fg("accent", text)));
-        container.addChild(new Text(theme.fg("accent", theme.bold("Select Theme")) + queryLabel + previewLabel, 1, 0));
-
-        list = new SelectList(available, Math.min(Math.max(available.length, 1), 12), {
-          selectedPrefix: (text) => theme.fg("accent", text),
-          selectedText: (text) => theme.fg("accent", text),
-          description: (text) => theme.fg("muted", text),
-          scrollInfo: (text) => theme.fg("dim", text),
-          noMatch: () => theme.fg("warning", "  No matching themes"),
-        });
-
-        const preferredIndex = available.findIndex((item) => item.value === preferred);
-        if (preferredIndex >= 0) list.setSelectedIndex(preferredIndex);
-        list.onSelectionChange = (item) => preview(item.value);
-        list.onSelect = (item) => done(item.value);
-        list.onCancel = () => done(undefined);
-        container.addChild(list);
-        container.addChild(new Text(
-          theme.fg("dim", "type search · backspace edit · ctrl+u clear · ↑↓ preview · enter apply · esc cancel"),
-          1,
-          0,
-        ));
-        container.addChild(new DynamicBorder((text) => theme.fg("accent", text)));
-        container.invalidate();
-
-        if (previewFirst) {
-          const first = list.getSelectedItem();
-          if (first) preview(first.value);
-        }
-      }
-
-      rebuild();
-
-      return {
-        render(width: number) {
-          return container.render(width);
+    const selected = await ctx.ui.custom<string | undefined>(
+      (tui, _theme, keybindings, done) =>
+        new ThemePreviewPicker({
+          names: themeNames,
+          activeName: originalName,
+          initialName: activeTheme,
+          getTheme: (name) => ctx.ui.getTheme(name),
+          keybindings,
+          onChange: () => tui.requestRender(),
+          onDone: done,
+        }),
+      {
+        overlay: true,
+        overlayOptions: {
+          anchor: "center",
+          width: "92%",
+          minWidth: 70,
+          maxWidth: 120,
+          maxHeight: "90%",
+          margin: 1,
         },
-        invalidate() {
-          container.invalidate();
-        },
-        handleInput(data: string) {
-          if (kb.matches(data, "app.tools.expand")) {
-            ctx.ui.setToolsExpanded(!ctx.ui.getToolsExpanded());
-            return;
-          }
-          if (matchesKey(data, Key.ctrl("u"))) {
-            if (query) {
-              query = "";
-              preferred = previewed;
-              rebuild();
-              tui.requestRender();
-            }
-            return;
-          }
-          if (matchesKey(data, Key.backspace)) {
-            if (query) {
-              query = query.slice(0, -1);
-              preferred = query ? undefined : previewed;
-              rebuild(Boolean(query));
-              tui.requestRender();
-            }
-            return;
-          }
+      },
+    );
 
-          const character = printableInput(data);
-          if (character !== undefined) {
-            query += character;
-            preferred = undefined;
-            rebuild(true);
-            tui.requestRender();
-            return;
-          }
-
-          list?.handleInput(data);
-          tui.requestRender();
-        },
-      };
-    });
-
-    if (!selected) {
-      if (originalTheme) ctx.ui.setTheme(originalTheme);
-      else if (originalName) ctx.ui.setTheme(originalName);
-      activeTheme = originalName;
-      return;
-    }
-
-    apply(selected, ctx);
+    if (selected) apply(selected, ctx);
   }
 
   pi.registerCommand("theme", {
