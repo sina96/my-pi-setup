@@ -1,0 +1,26 @@
+{
+  "name": "sina96-my-pi-setup",
+  "version": "1.0.0",
+  "private": true,
+  "keywords": [
+    "pi-package"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/sina96/my-pi-setup.git"
+  },
+  "peerDependencies": {
+    "@earendil-works/pi-ai": "*",
+    "@earendil-works/pi-coding-agent": "*",
+    "@earendil-works/pi-tui": "*",
+    "typebox": "*"
+  },
+  "pi": {
+    "extensions": [
+      "./extensions/*/src/index.ts"
+    ],
+    "themes": [
+      "./themes/*.json"
+    ]
+  }
+}
