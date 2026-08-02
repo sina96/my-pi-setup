@@ -47,4 +47,20 @@ export interface InsightsData {
   sessions: SessionRecord[];
 }
 
-export type InsightsView = "summary" | "models" | "projects" | "tools";
+export interface ContextMetric {
+  name: string;
+  tokens: number;
+  detail?: string;
+}
+
+export interface ContextInsight {
+  model: string;
+  limit: number;
+  total: number;
+  free: number;
+  measured: boolean;
+  categories: ContextMetric[];
+  roles: ContextMetric[];
+}
+
+export type InsightsView = "overview" | "models" | "projects" | "tools" | "context";
