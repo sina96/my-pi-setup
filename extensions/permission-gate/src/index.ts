@@ -9,12 +9,9 @@ import {
 } from "@earendil-works/pi-coding-agent";
 import {
   Container,
-  decodeKittyPrintable,
-  matchesKey,
   type SelectItem,
   SelectList,
   Text,
-  truncateToWidth,
 } from "@earendil-works/pi-tui";
 
 interface RiskRule {
@@ -46,7 +43,6 @@ interface SessionSettings {
 type RuleScope = "session" | "project" | "global";
 
 const ENTRY_TYPE = "simply-permission-gate-settings";
-const APPROVAL_WIDGET_KEY = "simply-permission-gate-approval";
 const GLOBAL_CONFIG_PATH = join(getAgentDir(), "permission-gate.json");
 
 const DEFAULT_RULES: RiskRule[] = [
@@ -431,77 +427,11 @@ export default function permissionGate(pi: ExtensionAPI) {
     await previous;
     pi.events.emit("herdr:blocked", { active: true, label: "Waiting for command approval" });
     try {
-      if (ctx.mode === "tui") {
-        let stopListening: (() => void) | undefined;
-        ctx.ui.setWorkingVisible(false);
-        try {
-          return await new Promise<"once" | "session" | "deny">((resolve) => {
-            let settled = false;
-            const finish = (decision: "once" | "session" | "deny") => {
-              if (settled) return;
-              settled = true;
-              resolve(decision);
-            };
-
-            stopListening = ctx.ui.onTerminalInput((data) => {
-              const printable = decodeKittyPrintable(data) ?? (data.length === 1 ? data : undefined);
-              if (printable === "1") finish("once");
-              else if (printable === "2") finish("session");
-              else if (printable === "3" || matchesKey(data, "escape") || matchesKey(data, "ctrl+c")) {
-                finish("deny");
-              }
-              // Keep approval keystrokes out of the editor. Native terminal
-              // scrollback remains independent and does not arrive here.
-              return { consume: true };
-            });
-
-            ctx.ui.setWidget(
-              APPROVAL_WIDGET_KEY,
-              (_tui, theme) => ({
-                render(width: number): string[] {
-                  const normalizedCommand = command.replace(/\s+/g, " ").trim();
-                  const border = theme.fg("borderAccent", "─".repeat(Math.max(0, width)));
-                  const choices =
-                    theme.fg("accent", "[1] Allow once") +
-                    theme.fg("muted", "  ·  ") +
-                    theme.fg("accent", "[2] Allow exact command for session") +
-                    theme.fg("muted", "  ·  ") +
-                    theme.fg("error", "[3] Deny");
-                  return [
-                    border,
-                    truncateToWidth(
-                      theme.fg("warning", theme.bold("Permission required")) +
-                        theme.fg("muted", ` · ${risks.join(", ")}`),
-                      width,
-                      "",
-                    ),
-                    truncateToWidth(theme.fg("toolOutput", `$ ${normalizedCommand}`), width, "…"),
-                    truncateToWidth(choices, width, ""),
-                    truncateToWidth(
-                      theme.fg(
-                        "dim",
-                        "Scroll through the transcript, return to the bottom, then press 1, 2, or 3 · esc denies",
-                      ),
-                      width,
-                      "",
-                    ),
-                    border,
-                  ];
-                },
-                invalidate(): void {},
-              }),
-              { placement: "belowEditor" },
-            );
-          });
-        } finally {
-          stopListening?.();
-          ctx.ui.setWidget(APPROVAL_WIDGET_KEY, undefined);
-          ctx.ui.setWorkingVisible(true);
-        }
-      }
-
+      const title = ctx.mode === "tui"
+        ? `Permission required\nRisk: ${risks.join(", ")}\nReview the pending bash command above, then choose.`
+        : `Permission required · ${risks.join(", ")}\n\n$ ${command}`;
       const choice = await ctx.ui.select(
-        `Permission required · ${risks.join(", ")}\n\n$ ${command}`,
+        title,
         ["Allow once", "Allow this exact command for this session", "Deny"],
       );
       if (choice === "Allow once") return "once";

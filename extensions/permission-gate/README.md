@@ -231,23 +231,18 @@ review mode still enforce their own independent read-only restrictions.
 
 ## Approval prompt and transcript scrolling
 
-In TUI mode, approval is a compact widget below the editor instead of a centered
-modal. It does not take focus, and the animated working row is paused while Pi
-waits. The full tool call remains in the transcript, so you can scroll up to
-inspect the command and surrounding code, then return to the bottom and choose:
+In TUI mode, approval uses the same built-in bottom selector as `ask_user`. The
+selector title stays deliberately short; it does not duplicate a long shell
+command. The pending Bash tool call remains directly above in the transcript.
 
-```text
-[1] Allow once
-[2] Allow this exact command for the session
-[3] Deny
-```
+Use the mouse wheel to inspect earlier code and the full command, return to the
+bottom, then use Up/Down and Enter to choose **Allow once**, **Allow this exact
+command for this session**, or **Deny**. Escape and Ctrl+C deny.
 
-Escape and Ctrl+C also deny. Approval input is consumed so it is not inserted
-into the editor. Native terminal scrollback does not trigger a Pi rerender, which
-avoids the old snap-to-dialog behavior. If a terminal is configured to send
-wheel events to applications instead of opening scrollback, use its native
-scrollback modifier (commonly Shift while scrolling); this is terminal behavior
-outside the extension API.
+Keeping the full command out of the selector is important: a large multi-line
+title forces Pi to repeatedly lay out a tall active component, which caused the
+old snap-to-bottom behavior. The compact selector behaves like `ask_user` while
+preserving the complete command in the normal tool-call display.
 
 ## Exact-command approvals
 
