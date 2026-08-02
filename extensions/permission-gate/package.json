@@ -2,7 +2,7 @@
   "name": "simply-permission-gate",
   "version": "0.1.0",
   "private": true,
-  "description": "An interactive safety gate for risky Pi bash commands",
+  "description": "A configurable interactive safety gate for risky Pi bash commands",
   "keywords": ["pi-package", "pi-extension", "permissions", "safety"],
   "license": "MIT",
   "peerDependencies": {

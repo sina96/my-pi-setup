@@ -114,8 +114,8 @@ pi -e ./extensions/review -e ./extensions/permission-gate
 
 [`extensions/permission-gate/`](extensions/permission-gate/README.md) pauses risky
 shell commands for explicit approval. It supports allow-once, exact-command
-session approval, deny-by-default headless behavior, and Herdr blocked-state
-notifications.
+session approval, global/project/session rule overrides, session-scoped YOLO
+mode, deny-by-default headless behavior, and Herdr blocked-state notifications.
 
 ```bash
 pi -e ./extensions/permission-gate
