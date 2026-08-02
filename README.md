@@ -1,6 +1,6 @@
 # My Pi Setup
 
-A modular, shareable [Pi](https://github.com/earendil-works/pi-mono) coding environment. Each customization stays separate so it can be installed, removed, or adapted independently. Please do not hard-copy the setup unchanged—use it as a starting point and customize it for your own workflow.
+A modular, shareable [Pi](https://pi.dev) coding environment. Each customization stays separate so it can be installed, removed, or adapted independently. Please do not hard-copy the setup unchanged—use it as a starting point and customize it for your own workflow.
 
 ![Screenshot](./assets/Pi-Setup-Screenshot-aug26.png)
 
