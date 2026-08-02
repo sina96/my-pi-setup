@@ -1,0 +1,17 @@
+{
+  "name": "simply-file-search",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Optional fd, ripgrep, and fzf search tools for Pi with built-in-tool fallback",
+  "keywords": ["pi-package", "pi-extension", "fd", "ripgrep", "fzf", "search"],
+  "license": "MIT",
+  "peerDependencies": {
+    "@earendil-works/pi-ai": "*",
+    "@earendil-works/pi-coding-agent": "*",
+    "@earendil-works/pi-tui": "*",
+    "typebox": "*"
+  },
+  "pi": {
+    "extensions": ["./src/index.ts"]
+  }
+}

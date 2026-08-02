@@ -1,0 +1,15 @@
+{
+  "name": "simply-theme-picker",
+  "version": "0.1.0",
+  "private": true,
+  "description": "A fuzzy, live-preview theme picker for Pi",
+  "keywords": ["pi-package", "pi-extension", "theme", "picker"],
+  "license": "MIT",
+  "peerDependencies": {
+    "@earendil-works/pi-coding-agent": "*",
+    "@earendil-works/pi-tui": "*"
+  },
+  "pi": {
+    "extensions": ["./src/index.ts"]
+  }
+}

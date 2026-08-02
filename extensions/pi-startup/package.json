@@ -1,0 +1,15 @@
+{
+  "name": "pi-startup",
+  "version": "0.1.0",
+  "private": true,
+  "description": "A responsive Pi startup dashboard with resource counts and shortcut hints",
+  "keywords": ["pi-package", "pi-extension", "startup", "header", "ui"],
+  "license": "MIT",
+  "peerDependencies": {
+    "@earendil-works/pi-coding-agent": "*",
+    "@earendil-works/pi-tui": "*"
+  },
+  "pi": {
+    "extensions": ["./src/index.ts"]
+  }
+}

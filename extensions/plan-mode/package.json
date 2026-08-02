@@ -1,0 +1,16 @@
+{
+  "name": "simply-plan-mode",
+  "version": "0.1.0",
+  "private": true,
+  "description": "A small read-only planning and execution mode for Pi",
+  "keywords": ["pi-package", "pi-extension", "plan", "read-only"],
+  "license": "MIT",
+  "peerDependencies": {
+    "@earendil-works/pi-ai": "*",
+    "@earendil-works/pi-coding-agent": "*",
+    "typebox": "*"
+  },
+  "pi": {
+    "extensions": ["./src/index.ts"]
+  }
+}

@@ -1,0 +1,14 @@
+{
+  "name": "simply-pi-clip",
+  "version": "0.1.0",
+  "private": true,
+  "description": "A compact clipboard picker for Pi responses",
+  "keywords": ["pi-package", "pi-extension", "clipboard", "markdown", "copy"],
+  "license": "MIT",
+  "peerDependencies": {
+    "@earendil-works/pi-coding-agent": "*"
+  },
+  "pi": {
+    "extensions": ["./src/index.ts"]
+  }
+}

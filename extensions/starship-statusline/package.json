@@ -1,0 +1,24 @@
+{
+  "name": "starship-statusline",
+  "version": "0.6.0",
+  "private": true,
+  "description": "A configurable Starship-powered statusline for pi with local Git information and optional GitHub PR links",
+  "keywords": [
+    "pi-package",
+    "pi-extension",
+    "starship",
+    "git",
+    "footer"
+  ],
+  "license": "MIT",
+  "peerDependencies": {
+    "@earendil-works/pi-ai": "*",
+    "@earendil-works/pi-coding-agent": "*",
+    "@earendil-works/pi-tui": "*"
+  },
+  "pi": {
+    "extensions": [
+      "./src/index.ts"
+    ]
+  }
+}
