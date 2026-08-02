@@ -2,15 +2,25 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import {
   CONFIG_DIR_NAME,
+  DynamicBorder,
   getAgentDir,
   type ExtensionAPI,
   type ExtensionContext,
 } from "@earendil-works/pi-coding-agent";
+import {
+  Container,
+  type SelectItem,
+  SelectList,
+  Text,
+  truncateToWidth,
+  wrapTextWithAnsi,
+} from "@earendil-works/pi-tui";
 
 interface RiskRule {
   id: string;
   label: string;
   pattern: RegExp;
+  operations?: string;
   source: "default" | "global" | "project" | "session";
 }
 
@@ -19,6 +29,7 @@ interface StoredRule {
   label: string;
   pattern: string;
   flags?: string;
+  operations?: string;
 }
 
 interface RuleConfig {
@@ -41,60 +52,70 @@ const DEFAULT_RULES: RiskRule[] = [
     id: "recursive-file-deletion",
     label: "recursive file deletion",
     pattern: /\brm\b[^\n;&|]*(?:\s-[a-z]*r[a-z]*\b|\s--recursive\b)/i,
+    operations: "rm -r, rm -R, rm --recursive",
     source: "default",
   },
   {
     id: "privilege-escalation",
     label: "privilege escalation",
     pattern: /(?:^|[;&|]\s*|\s)(?:sudo|doas|su)(?:\s|$)/i,
+    operations: "sudo, doas, su",
     source: "default",
   },
   {
     id: "dangerous-permission-change",
     label: "dangerous permission change",
     pattern: /\b(?:chmod|chown)\b[^\n;&|]*(?:\b777\b|\s-[a-z]*R[a-z]*\b)/i,
+    operations: "chmod/chown 777 or recursive",
     source: "default",
   },
   {
     id: "environment-secret-exposure",
     label: "environment or secret exposure",
     pattern: /(?:^|[;&|]\s*|\s)(?:printenv|set)(?:\s|$)|(?:^|[;&|]\s*)env(?:\s|$)/i,
+    operations: "env, printenv, bare set",
     source: "default",
   },
   {
     id: "download-piped-to-shell",
     label: "download piped into a shell",
     pattern: /\b(?:curl|wget)\b[^\n]*(?:\||>)\s*(?:sudo\s+)?(?:ba|z|fi|da)?sh\b/i,
+    operations: "curl/wget piped or redirected to a shell",
     source: "default",
   },
   {
     id: "destructive-git-operation",
     label: "destructive Git operation",
     pattern: /\bgit\s+(?:reset\s+--hard\b|clean\s+[^\n;&|]*-[a-z]*f|push\s+[^\n;&|]*(?:--force(?:-with-lease)?\b|-f\b)|branch\s+-D\b|checkout\s+--\s+\.|restore\s+\.)/i,
+    operations: "git reset --hard, clean -f, force push, branch -D, checkout/restore .",
     source: "default",
   },
   {
     id: "disk-filesystem-operation",
     label: "disk or filesystem operation",
     pattern: /(?:^|[;&|]\s*|\s)(?:mkfs(?:\.\w+)?|fdisk|parted|dd)(?:\s|$)/i,
+    operations: "mkfs, fdisk, parted, dd",
     source: "default",
   },
   {
     id: "system-shutdown-reboot",
     label: "system shutdown or reboot",
     pattern: /(?:^|[;&|]\s*|\s)(?:shutdown|reboot|poweroff|halt)(?:\s|$)/i,
+    operations: "shutdown, reboot, poweroff, halt",
     source: "default",
   },
   {
     id: "container-destructive-cleanup",
     label: "container-wide destructive cleanup",
     pattern: /\b(?:docker|podman)\s+(?:system\s+prune|volume\s+prune|image\s+prune)\b/i,
+    operations: "docker/podman system, volume, or image prune",
     source: "default",
   },
   {
     id: "package-publication",
     label: "package publication",
     pattern: /\b(?:npm|pnpm|yarn)\s+(?:publish|unpublish)\b/i,
+    operations: "npm/pnpm/yarn publish or unpublish",
     source: "default",
   },
 ];
@@ -126,12 +147,16 @@ function compileRule(
   if (typeof flags !== "string" || !/^[imsu]*$/.test(flags) || new Set(flags).size !== flags.length) {
     return { error: `rule ${candidate.id} has invalid flags; use only i, m, s, or u` };
   }
+  if (candidate.operations !== undefined && typeof candidate.operations !== "string") {
+    return { error: `rule ${candidate.id} operations must be a string` };
+  }
   try {
     return {
       rule: {
         id: candidate.id,
         label: candidate.label.trim(),
         pattern: new RegExp(candidate.pattern, flags),
+        operations: candidate.operations?.trim() || undefined,
         source,
       },
     };
@@ -197,6 +222,7 @@ function storedRule(rule: RiskRule): StoredRule {
     label: rule.label,
     pattern: rule.pattern.source,
     flags: rule.pattern.flags,
+    operations: rule.operations,
   };
 }
 
@@ -297,45 +323,94 @@ export default function permissionGate(pi: ExtensionAPI) {
   }
 
   async function showRuleList(ctx: ExtensionContext): Promise<void> {
-    const order: Record<RiskRule["source"], number> = {
-      default: 0,
-      global: 1,
-      project: 2,
-      session: 3,
-    };
+    const scopeFor = (rule: RiskRule): RuleScope =>
+      rule.source === "default" ? "global" : rule.source;
+    const order: Record<RuleScope, number> = { global: 0, project: 1, session: 2 };
     const rules = allRules().sort(
       (left, right) =>
-        order[left.source] - order[right.source] || left.label.localeCompare(right.label),
+        order[scopeFor(left)] - order[scopeFor(right)] || left.label.localeCompare(right.label),
     );
-    const counts = rules.reduce<Record<string, number>>((result, rule) => {
-      result[rule.source] = (result[rule.source] ?? 0) + 1;
-      return result;
-    }, {});
-    const summary = ["default", "global", "project", "session"]
-      .filter((source) => counts[source])
-      .map((source) => `${source}: ${counts[source]}`)
+    const counts = rules.reduce<Record<RuleScope, number>>(
+      (result, rule) => {
+        result[scopeFor(rule)] += 1;
+        return result;
+      },
+      { global: 0, project: 0, session: 0 },
+    );
+    const summary = (["global", "project", "session"] as const)
+      .filter((scope) => counts[scope] > 0)
+      .map((scope) => `${scope}: ${counts[scope]}`)
       .join(" · ");
-    const options = rules.map(
-      (rule) => `${rule.source.toUpperCase().padEnd(7)} │ ${rule.label}  (${rule.id})`,
-    );
+    const operationText = (rule: RiskRule): string =>
+      rule.operations ?? `/${rule.pattern.source}/${rule.pattern.flags}`;
+    const labelText = (rule: RiskRule): string =>
+      `${scopeFor(rule).toUpperCase().padEnd(7)} │ ${rule.label}  (${rule.id})`;
 
     if (!ctx.hasUI) {
       ctx.ui.notify(
-        `Permission-gate rules (${rules.length})\n${summary}\n\n${options.join("\n")}`,
+        `Permission-gate rules (${rules.length})\n${summary}\n\n${rules
+          .map((rule) => `${labelText(rule)} │ ${operationText(rule)}`)
+          .join("\n")}`,
         "info",
       );
       return;
     }
 
-    const selected = await ctx.ui.select(
-      `Permission-gate rules · ${rules.length} active\n${summary}\n\nSelect a rule to inspect`,
-      options,
-    );
-    if (!selected) return;
-    const rule = rules[options.indexOf(selected)];
+    let selectedId: string | null | undefined;
+    if (ctx.mode === "tui") {
+      const items: SelectItem[] = rules.map((rule) => ({
+        value: rule.id,
+        label: labelText(rule),
+        description: operationText(rule),
+      }));
+      selectedId = await ctx.ui.custom<string | null>((tui, theme, _keybindings, done) => {
+        const container = new Container();
+        container.addChild(new DynamicBorder((text: string) => theme.fg("accent", text)));
+        container.addChild(
+          new Text(
+            theme.fg("accent", theme.bold(`Permission-gate rules · ${rules.length} active`)) +
+              "\n" +
+              theme.fg("muted", summary),
+            1,
+            0,
+          ),
+        );
+        const list = new SelectList(items, Math.min(items.length, 12), {
+          selectedPrefix: (text) => theme.fg("accent", text),
+          selectedText: (text) => theme.fg("accent", text),
+          description: (text) => theme.fg("muted", text),
+          scrollInfo: (text) => theme.fg("dim", text),
+          noMatch: (text) => theme.fg("warning", text),
+        }, { minPrimaryColumnWidth: 34, maxPrimaryColumnWidth: 52 });
+        list.onSelect = (item) => done(item.value);
+        list.onCancel = () => done(null);
+        container.addChild(list);
+        container.addChild(
+          new Text(theme.fg("dim", "↑↓ navigate · enter inspect · esc close"), 1, 0),
+        );
+        container.addChild(new DynamicBorder((text: string) => theme.fg("accent", text)));
+        return {
+          render: (width: number) => container.render(width),
+          invalidate: () => container.invalidate(),
+          handleInput: (data: string) => {
+            list.handleInput(data);
+            tui.requestRender();
+          },
+        };
+      });
+    } else {
+      const options = rules.map((rule) => `${labelText(rule)} │ ${operationText(rule)}`);
+      const selected = await ctx.ui.select(
+        `Permission-gate rules · ${rules.length} active\n${summary}`,
+        options,
+      );
+      selectedId = selected ? rules[options.indexOf(selected)]?.id : undefined;
+    }
+
+    const rule = rules.find((candidate) => candidate.id === selectedId);
     if (!rule) return;
     await ctx.ui.select(
-      `${rule.label}\n\nScope:   ${rule.source}\nID:      ${rule.id}\nPattern: /${rule.pattern.source}/${rule.pattern.flags}`,
+      `${rule.label}\n\nScope:      ${scopeFor(rule)}\nOrigin:     ${rule.source === "default" ? "built-in default" : rule.source}\nID:         ${rule.id}\nOperations: ${operationText(rule)}\nPattern:    /${rule.pattern.source}/${rule.pattern.flags}`,
       ["Close"],
     );
   }
@@ -354,6 +429,90 @@ export default function permissionGate(pi: ExtensionAPI) {
     await previous;
     pi.events.emit("herdr:blocked", { active: true, label: "Waiting for command approval" });
     try {
+      if (ctx.mode === "tui") {
+        const choices = [
+          { value: "once" as const, label: "Allow once" },
+          { value: "session" as const, label: "Allow this exact command for this session" },
+          { value: "deny" as const, label: "Deny" },
+        ];
+        const decision = await ctx.ui.custom<"once" | "session" | "deny">(
+          (tui, theme, keybindings, done) => {
+            let selectedIndex = 0;
+            let commandOffset = 0;
+            let maxCommandOffset = 0;
+            const visibleCommandLines = 4;
+
+            return {
+              render(width: number): string[] {
+                const contentWidth = Math.max(20, width - 4);
+                const wrapped = command
+                  .split("\n")
+                  .flatMap((line) => wrapTextWithAnsi(line || " ", contentWidth));
+                maxCommandOffset = Math.max(0, wrapped.length - visibleCommandLines);
+                commandOffset = Math.min(commandOffset, maxCommandOffset);
+                const end = Math.min(wrapped.length, commandOffset + visibleCommandLines);
+                const lines = [
+                  theme.fg("warning", theme.bold("Permission required")),
+                  theme.fg("muted", risks.join(", ")),
+                  "",
+                  theme.fg(
+                    "dim",
+                    `Command${wrapped.length > visibleCommandLines ? ` · lines ${commandOffset + 1}-${end} of ${wrapped.length}` : ""}`,
+                  ),
+                  ...wrapped
+                    .slice(commandOffset, end)
+                    .map((line, index) =>
+                      theme.fg("toolOutput", `${commandOffset + index === 0 ? "$ " : "  "}${line}`),
+                    ),
+                  "",
+                  ...choices.map((choice, index) =>
+                    index === selectedIndex
+                      ? theme.fg("accent", `→ ${choice.label}`)
+                      : theme.fg("text", `  ${choice.label}`),
+                  ),
+                  "",
+                  theme.fg(
+                    "dim",
+                    "↑↓ choose · pgup/pgdn scroll command · enter select · esc deny",
+                  ),
+                ];
+                return lines.map((line) => truncateToWidth(line, width, ""));
+              },
+              handleInput(data: string): void {
+                if (keybindings.matches(data, "tui.select.up") || data === "k") {
+                  selectedIndex = Math.max(0, selectedIndex - 1);
+                } else if (keybindings.matches(data, "tui.select.down") || data === "j") {
+                  selectedIndex = Math.min(choices.length - 1, selectedIndex + 1);
+                } else if (keybindings.matches(data, "tui.select.pageUp")) {
+                  commandOffset = Math.max(0, commandOffset - visibleCommandLines);
+                } else if (keybindings.matches(data, "tui.select.pageDown")) {
+                  commandOffset = Math.min(maxCommandOffset, commandOffset + visibleCommandLines);
+                } else if (keybindings.matches(data, "tui.select.confirm") || data === "\n") {
+                  done(choices[selectedIndex]?.value ?? "deny");
+                  return;
+                } else if (keybindings.matches(data, "tui.select.cancel")) {
+                  done("deny");
+                  return;
+                }
+                tui.requestRender();
+              },
+              invalidate(): void {},
+            };
+          },
+          {
+            overlay: true,
+            overlayOptions: {
+              anchor: "center",
+              width: "90%",
+              minWidth: 50,
+              maxHeight: "70%",
+              margin: 1,
+            },
+          },
+        );
+        return decision ?? "deny";
+      }
+
       const choice = await ctx.ui.select(
         `Permission required · ${risks.join(", ")}\n\n$ ${command}`,
         ["Allow once", "Allow this exact command for this session", "Deny"],

@@ -29,8 +29,14 @@ The gate asks before:
 - Docker/Podman system, image, and volume pruning
 - npm/pnpm/yarn publication or unpublication
 
-Use `/permission-gate rule list` to see every active rule, its stable ID, source,
-and regular expression.
+Use `/permission-gate rule list` to open the rule browser. Each row starts with
+the effective scope (`GLOBAL`, `PROJECT`, or `SESSION`) and shows the rule name,
+ID, and as much of its guarded operations as fits on one line. Built-in defaults
+appear under `GLOBAL`; selecting one identifies its origin as a built-in default.
+Custom rules show their regex when no friendly operation summary is configured.
+
+The browser shows only effective rules. When a project or session rule replaces
+an inherited rule with the same ID, the overridden version is omitted.
 
 ## Rule scopes and precedence
 
@@ -173,7 +179,9 @@ To disable it instead:
 ```
 
 Valid regex flags are `i`, `m`, `s`, and `u`. JSON requires backslashes to be
-escaped, so regex `\bgit\b` is written as `"\\bgit\\b"`.
+escaped, so regex `\bgit\b` is written as `"\\bgit\\b"`. Add an optional
+`"operations"` string when you want the rule browser to show a friendly summary
+instead of the regex.
 
 ## Session rules
 
@@ -220,6 +228,20 @@ Restore the gate or inspect its state:
 `yolo-mode` is deliberately session-scoped and emits a visible warning when it
 is enabled. It does not modify global or project configuration. Plan mode and
 review mode still enforce their own independent read-only restrictions.
+
+## Approval dialog and long commands
+
+In TUI mode, approvals use a bounded overlay so a long command cannot push the
+entire conversation off screen. The overlay shows four wrapped command lines at
+a time. Use **Page Up** and **Page Down** to inspect the rest before deciding;
+the line counter shows the current range. Arrow keys continue to select the
+approval action, Enter confirms it, and Escape denies it.
+
+Terminal scrollback while a focused Pi selector is open can snap back to the
+active dialog because Pi owns and redraws the terminal viewport. This behavior
+is in Pi's inline TUI interaction rather than the permission rule matching, and
+is not specific to Ghostty. The bounded overlay and internal command scrolling
+avoid relying on terminal scrollback during approval.
 
 ## Exact-command approvals
 
