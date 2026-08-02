@@ -1,12 +1,17 @@
 # My Pi Setup
 
 A modular, shareable Pi coding environment. Each customization stays separate so
-it can be installed or removed independently.
+it can be installed or removed independently. Please dont hard copy. Use your fingers or an agent to customize for your needs.
 
+![Screenshot](./assets/Pi-Setup-Screenshot-aug26.png)
+
+# Directories
 - `assets/` — images and other supporting files
 - `extensions/` — Pi extensions
 - `skills/` — Pi agent skills
 - `themes/` — reserved for optional full Pi UI themes
+
+# Custom Extensions
 
 ## Starship statusline
 
