@@ -54,12 +54,11 @@ ask your agent to install them when you need them.
 
 - [`aura`](themes/aura.json) — Deep charcoal with violet accents and mint highlights.
 - [`catppuccin-mocha`](themes/catppuccin-mocha.json) — Soft Mocha surfaces with teal and blue accents.
+- [`dayowl`](themes/dayowl.json) — Bright, clean surfaces with blue, orange, and green accents.
 - [`dracula-plus`](themes/dracula-plus.json) — Dark neutral panels with vivid Dracula-inspired green, red, and gold.
 - [`gruvbox-dark-hard`](themes/gruvbox-dark-hard.json) — High-contrast Gruvbox dark palette with warm yellow accents.
-- [`gruvbox`](themes/gruvbox.json) — Classic warm retro Gruvbox colors on a dark background.
-- [`nebula-pulse`](themes/nebula-pulse.json) — Near-black cosmic palette with electric violet and cyan.
+- [`modern-dark`](themes/modern-dark.json) — Near-black surfaces with warm orange accents and cool blue-gray text.
 - [`nightowl`](themes/nightowl.json) — Deep navy Night Owl palette with cyan and blue highlights.
-- [`opencode`](themes/opencode.json) — Minimal near-black interface with warm peach and purple accents.
 - [`rose-pine`](themes/rose-pine.json) — Muted rose, lavender, gold, and pine tones.
 - [`synthwave-84`](themes/synthwave-84.json) — Neon pink and cyan Synthwave colors over deep purple surfaces.
 - [`tokyo-night`](themes/tokyo-night.json) — Cool blue and violet Tokyo Night palette with balanced syntax colors.
