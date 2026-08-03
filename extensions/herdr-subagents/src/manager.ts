@@ -250,15 +250,45 @@ export class SubagentManager {
   }
 
   async close(id: string, reason = "Closed by user"): Promise<SubagentRun> {
+    return this.closeSurface(id, reason);
+  }
+
+  async closeSurface(
+    id: string,
+    reason = "Closed by user",
+  ): Promise<SubagentRun> {
     const run = this.require(id);
-    if (isTerminal(run)) return run;
+    if (!run.paneClosed) {
+      const paneId = await this.currentPane(run);
+      if (paneId && this.pi) await closePane(this.pi, paneId);
+      run.paneClosed = true;
+    }
+    if (!isTerminal(run)) {
+      run.status = "failed";
+      run.error = reason;
+      run.finishedAt = Date.now();
+      run.consumed = true;
+      this.settle(run);
+    } else {
+      this.notify();
+    }
+    return run;
+  }
+
+  async focus(id: string): Promise<SubagentRun> {
+    const run = this.require(id);
+    if (run.paneClosed) throw new Error(`Herdr pane for ${id} is closed`);
     const paneId = await this.currentPane(run);
-    if (paneId && this.pi) await closePane(this.pi, paneId);
-    run.status = "failed";
-    run.error = reason;
-    run.finishedAt = Date.now();
-    run.consumed = true;
-    this.settle(run);
+    if (!paneId || !this.pi)
+      throw new Error(`Herdr pane for ${id} no longer exists`);
+    const result = await this.pi.exec("herdr", ["agent", "focus", paneId], {
+      timeout: 5_000,
+    });
+    if (result.code !== 0)
+      throw new Error(
+        `Failed to focus ${id}: ${result.stderr.trim() || result.stdout.trim()}`,
+      );
+    run.paneId = paneId;
     return run;
   }
 

@@ -1,8 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { visibleWidth } from "@earendil-works/pi-tui";
 import { __test as herdr } from "./src/herdr.ts";
 import extension from "./src/index.ts";
 import { __test as manager, resolveTrust } from "./src/manager.ts";
+import { popupInputAction, renderSubagentsPopup } from "./src/popup.ts";
+import type { SubagentRun } from "./src/types.ts";
 
 test("parses Herdr tab creation responses", () => {
   assert.equal(
@@ -38,6 +41,58 @@ test("bounds delivered result text", () => {
   const short = "ok";
   assert.equal(manager.boundedOutput(short), short);
   assert.match(manager.boundedOutput("x".repeat(30_000)), /Result truncated/);
+});
+
+test("renders and navigates the subagent popup", () => {
+  const run: SubagentRun = {
+    id: "sa-1",
+    token: "sa-1-token",
+    name: "Review auth",
+    task: "Review authentication",
+    cwd: "/repo",
+    paneId: "w1:p2",
+    paneLabel: "sa-1",
+    resultPath: "/tmp/result.json",
+    exitCodePath: "/tmp/exit-code",
+    sessionDir: "/tmp/session",
+    provider: "openai-codex",
+    model: "gpt-test",
+    thinking: "medium",
+    status: "running",
+    startedAt: Date.now() - 5_000,
+    consumed: false,
+    delivered: false,
+  };
+  const theme = {
+    fg: (_color: string, text: string) => text,
+    bg: (_color: string, text: string) => text,
+    bold: (text: string) => text,
+  };
+  const lines = renderSubagentsPopup([run], 0, true, 100, theme as never);
+  assert.ok(lines.some((line) => line.includes("Review auth")));
+  assert.ok(lines.some((line) => line.includes("openai-codex/gpt-test")));
+  assert.ok(lines.every((line) => visibleWidth(line) <= 100));
+
+  const keybindings = {
+    matches: (input: string, id: string) =>
+      input === "enter" && id === "tui.select.confirm",
+  };
+  assert.equal(
+    popupInputAction("j", 0, 3, false, keybindings).selectedIndex,
+    1,
+  );
+  assert.equal(
+    popupInputAction("G", 0, 3, false, keybindings).selectedIndex,
+    2,
+  );
+  assert.equal(
+    popupInputAction("enter", 0, 3, false, keybindings).expanded,
+    true,
+  );
+  assert.equal(
+    popupInputAction("x", 0, 3, false, keybindings).action,
+    "close-pane",
+  );
 });
 
 test("starts with subagent tools inactive", async () => {

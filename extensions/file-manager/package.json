@@ -1,0 +1,24 @@
+{
+  "name": "file-manager",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Neovim-style Pi file browser backed by fd, rg, and fzf",
+  "keywords": [
+    "pi-package",
+    "pi-extension",
+    "fd",
+    "ripgrep",
+    "fzf",
+    "herdr"
+  ],
+  "license": "MIT",
+  "peerDependencies": {
+    "@earendil-works/pi-coding-agent": "*",
+    "@earendil-works/pi-tui": "*"
+  },
+  "pi": {
+    "extensions": [
+      "./src/index.ts"
+    ]
+  }
+}

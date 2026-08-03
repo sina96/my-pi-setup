@@ -3,6 +3,7 @@ import { fileURLToPath } from "node:url";
 import { StringEnum } from "@earendil-works/pi-ai";
 import type {
   ExtensionAPI,
+  ExtensionCommandContext,
   ExtensionContext,
 } from "@earendil-works/pi-coding-agent";
 import { Text } from "@earendil-works/pi-tui";
@@ -10,6 +11,11 @@ import { Type } from "typebox";
 import { registerChildReporter } from "./child.ts";
 import { checkHerdr } from "./herdr.ts";
 import { getManager, resolveTrust } from "./manager.ts";
+import {
+  popupInputAction,
+  renderSubagentsPopup,
+  type PopupAction,
+} from "./popup.ts";
 import {
   THINKING_LEVELS,
   type SubagentDetails,
@@ -65,6 +71,7 @@ function details(run: SubagentRun): SubagentDetails {
     output: run.output,
     error: run.error,
     sessionFile: run.sessionFile,
+    paneClosed: run.paneClosed,
   };
 }
 
@@ -400,6 +407,140 @@ export default function herdrSubagents(pi: ExtensionAPI): void {
     },
   });
 
+  async function showSubagentsPopup(
+    ctx: ExtensionCommandContext,
+  ): Promise<void> {
+    if (!ctx.hasUI || ctx.mode !== "tui") {
+      const runs = manager.list();
+      ctx.ui.notify(
+        runs.length ? runs.map(describe).join("\n") : "No subagents tracked",
+        "info",
+      );
+      return;
+    }
+    if (manager.list().length === 0) {
+      ctx.ui.notify("No subagents tracked", "info");
+      return;
+    }
+
+    let selectedId: string | undefined;
+    for (;;) {
+      let unsubscribePopup: (() => void) | undefined;
+      let refreshTimer: ReturnType<typeof setInterval> | undefined;
+      const outcome = await ctx.ui.custom<PopupAction>(
+        (tui, theme, keybindings, done) => {
+          let runs = manager.list();
+          let selectedIndex = selectedId
+            ? Math.max(
+                0,
+                runs.findIndex((run) => run.id === selectedId),
+              )
+            : 0;
+          let expanded = false;
+          const refresh = () => {
+            runs = manager.list();
+            selectedIndex = Math.max(
+              0,
+              Math.min(selectedIndex, Math.max(0, runs.length - 1)),
+            );
+            tui.requestRender();
+          };
+          unsubscribePopup = manager.subscribe(refresh);
+          refreshTimer = setInterval(refresh, 1_000);
+          refreshTimer.unref?.();
+
+          return {
+            render(width: number) {
+              return renderSubagentsPopup(
+                runs,
+                selectedIndex,
+                expanded,
+                width,
+                theme,
+              );
+            },
+            invalidate() {},
+            handleInput(input: string) {
+              const next = popupInputAction(
+                input,
+                selectedIndex,
+                runs.length,
+                expanded,
+                keybindings,
+              );
+              selectedIndex = next.selectedIndex;
+              expanded = next.expanded;
+              selectedId = runs[selectedIndex]?.id;
+              if (next.action) {
+                if (next.action === "close") {
+                  done({ action: "close", selectedId });
+                } else if (selectedId) {
+                  done({ action: next.action, selectedId } as PopupAction);
+                }
+                return;
+              }
+              tui.requestRender();
+            },
+          };
+        },
+        {
+          overlay: true,
+          overlayOptions: {
+            anchor: "center",
+            width: "94%",
+            minWidth: 76,
+            maxHeight: "92%",
+            margin: 1,
+          },
+        },
+      );
+      unsubscribePopup?.();
+      if (refreshTimer) clearInterval(refreshTimer);
+
+      if (!outcome || outcome.action === "close") return;
+      selectedId = outcome.selectedId;
+      try {
+        if (outcome.action === "focus") {
+          await manager.focus(outcome.selectedId);
+          return;
+        }
+        const run = manager.get(outcome.selectedId);
+        if (!run) {
+          ctx.ui.notify(
+            `Unknown subagent id: ${outcome.selectedId}`,
+            "warning",
+          );
+          continue;
+        }
+        if (outcome.action === "interrupt") {
+          if (run.status === "completed" || run.status === "failed") {
+            ctx.ui.notify(`${run.id} is already ${run.status}`, "info");
+          } else {
+            await manager.interrupt(run.id);
+            ctx.ui.notify(`Interrupted ${run.id} · ${run.name}`, "info");
+          }
+          continue;
+        }
+        const confirmed = await ctx.ui.confirm(
+          "Close Herdr pane?",
+          `${run.id} · ${run.name}${run.status === "completed" || run.status === "failed" ? "" : "\nThis also stops the active subagent."}`,
+        );
+        if (confirmed) {
+          await manager.closeSurface(
+            run.id,
+            "Pane closed from /subagents list",
+          );
+          ctx.ui.notify(`Closed pane for ${run.id}`, "info");
+        }
+      } catch (error) {
+        ctx.ui.notify(
+          error instanceof Error ? error.message : String(error),
+          "error",
+        );
+      }
+    }
+  }
+
   pi.registerCommand("subagents", {
     description: "Herdr subagents: /subagents [on|off|status|list|stop-all]",
     handler: async (args, ctx) => {
@@ -449,11 +590,7 @@ export default function herdrSubagents(pi: ExtensionAPI): void {
         return;
       }
       if (action === "list") {
-        const runs = manager.list();
-        ctx.ui.notify(
-          runs.length ? runs.map(describe).join("\n") : "No subagents tracked",
-          "info",
-        );
+        await showSubagentsPopup(ctx);
         return;
       }
       if (action === "stop-all") {

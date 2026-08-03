@@ -45,6 +45,7 @@ export interface SubagentRun {
   output?: string;
   error?: string;
   sessionFile?: string;
+  paneClosed?: boolean;
   consumed: boolean;
   delivered: boolean;
   lastPaneCheckAt?: number;
@@ -65,4 +66,5 @@ export interface SubagentDetails {
   output?: string;
   error?: string;
   sessionFile?: string;
+  paneClosed?: boolean;
 }

@@ -8,6 +8,8 @@ A modular, shareable [Pi](https://pi.dev) coding environment. Each customization
 - [Pi Coding Agent](https://pi.dev)
 - [Herdr](https://herdr.dev)
 - [Starship](https://starship.rs)
+- [Neovim](https://neovim.io)
+- [Zed](https://zed.dev)
 
 ## Directories
 

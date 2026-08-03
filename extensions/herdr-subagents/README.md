@@ -22,6 +22,8 @@ Other commands:
 /subagents stop-all
 ```
 
+In TUI mode, `/subagents list` opens a Neovim-style popup. Use `j`/`k` or arrows to move, Enter for details, `i` to interrupt, `x` to close a pane, `f` to focus its Herdr pane, and `q` or Escape to close. Outside TUI mode it falls back to a text notification.
+
 ## Model tools
 
 When enabled, the extension activates:
@@ -36,6 +38,6 @@ Each child gets its own Herdr tab and Pi session. Completion is published throug
 
 ## Current scope
 
-This initial implementation supports Pi children, inherited or overridden model/thinking settings, up to four concurrent runs, result delivery, interruption, shutdown cleanup, compact status UI, and watcher preservation across `/reload`.
+This initial implementation supports Pi children, inherited or overridden model/thinking settings, up to four concurrent runs, result delivery, interruption, shutdown cleanup, compact status UI, an interactive subagent list, and watcher preservation across `/reload`.
 
 Agent definition files, session forking, resume, `caller_ping`, and a takeover dashboard are intentionally deferred.
