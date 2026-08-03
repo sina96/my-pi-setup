@@ -21,6 +21,7 @@ A modular, shareable [Pi](https://pi.dev) coding environment. Each customization
 ## Custom Extensions
 
 - [`ask-user`](extensions/ask-user/README.md) — Adds the `ask_user` tool for one focused question with choices, freeform answers, timeouts, and Herdr blocked-state integration.
+- [`file-manager`](extensions/file-manager/README.md) — Adds a Neovim-style `/files` browser with filename and content search plus actions for copying, revealing, and opening files.
 - [`goal`](extensions/goal/README.md) — Runs a persistent, verification-aware objective loop with automatic continuation and bounded turn batches.
 - [`herdr-subagents`](extensions/herdr-subagents/README.md) — Adds default-off, asynchronous Pi subagents in dedicated Herdr tabs with automatic result delivery.
 - [`permission-gate`](extensions/permission-gate/README.md) — Requests approval for risky shell commands with global, project, and session policies, exact-command approvals, and session YOLO mode.
