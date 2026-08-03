@@ -4,6 +4,11 @@
 
 A modular, shareable [Pi](https://pi.dev) coding environment. Each customization stays separate so it can be installed, removed, or adapted independently. Please do not hard-copy the setup unchanged—use it as a starting point and customize it for your own workflow.
 
+## Recommended tools to use with this setup
+- [Pi Coding Agent](https://pi.dev)
+- [Herdr](https://herdr.dev)
+- [Starship](https://starship.rs)
+
 ## Directories
 
 - `assets/` — screenshots and supporting files
@@ -15,8 +20,10 @@ A modular, shareable [Pi](https://pi.dev) coding environment. Each customization
 
 - [`ask-user`](extensions/ask-user/README.md) — Adds the `ask_user` tool for one focused question with choices, freeform answers, timeouts, and Herdr blocked-state integration.
 - [`goal`](extensions/goal/README.md) — Runs a persistent, verification-aware objective loop with automatic continuation and bounded turn batches.
+- [`herdr-subagents`](extensions/herdr-subagents/README.md) — Adds default-off, asynchronous Pi subagents in dedicated Herdr tabs with automatic result delivery.
 - [`permission-gate`](extensions/permission-gate/README.md) — Requests approval for risky shell commands with global, project, and session policies, exact-command approvals, and session YOLO mode.
 - [`pi-clip`](extensions/pi-clip/README.md) — Adds `/clip` for selecting and copying code blocks, tables, lists, ranges, prompts, or responses.
+- [`pi-herdr-btw`](extensions/pi-herdr-btw/README.md) — Opens a context-aware, tool-enabled `/btw` side thread in a focused Herdr pane with optional merge-back.
 - [`pi-startup`](extensions/pi-startup/README.md) — Replaces the standard startup header with a responsive dashboard showing the Pi logo, resource counts, shortcuts, and version.
 - [`plan-mode`](extensions/plan-mode/README.md) — Provides a PLAN → EXECUTE workflow with read-only planning tools and controlled transition into implementation.
 - [`review`](extensions/review/README.md) — Adds a temporary read-only `/review` workflow for working trees, branches, commits, paths, and GitHub pull requests.
@@ -32,6 +39,13 @@ These directories document upstream packages without vendoring or loading them:
 
 - [`pi-fff`](extensions/pi-fff/README.md) — Indexed fuzzy file and content search from `npm:@ff-labs/pi-fff`.
 - [`pi-goal-list-loop-audit`](extensions/pi-goal-list-loop-audit/README.md) — Advanced task queues, process loops, and isolated completion audits.
+
+ask your agent to install them when you need them.
+
+#### Notes
+
+`extensions/herdr-agent-state.ts` is generated and managed by Herdr. Put custom extensions beside it rather than editing it.
+
 
 ## Themes
 
@@ -64,7 +78,3 @@ pi update --extensions
 ```
 
 Then run `/reload` or restart Pi.
-
-## Notes
-
-`extensions/herdr-agent-state.ts` is generated and managed by Herdr. Put custom extensions beside it rather than editing it.

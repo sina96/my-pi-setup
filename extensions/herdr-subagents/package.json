@@ -1,0 +1,25 @@
+{
+  "name": "simply-herdr-subagents",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Toggleable, asynchronous Pi subagents running in Herdr tabs",
+  "keywords": [
+    "pi-package",
+    "pi-extension",
+    "subagents",
+    "herdr"
+  ],
+  "license": "MIT",
+  "peerDependencies": {
+    "@earendil-works/pi-ai": "*",
+    "@earendil-works/pi-coding-agent": "*",
+    "@earendil-works/pi-tui": "*",
+    "typebox": "*"
+  },
+  "pi": {
+    "extensions": [
+      "./src/index.ts"
+    ]
+  }
+}

@@ -1,0 +1,23 @@
+{
+  "name": "pi-herdr-btw",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Open a tool-enabled Pi side thread in a focused Herdr pane without changing the parent transcript",
+  "keywords": [
+    "pi-package",
+    "pi-extension",
+    "herdr",
+    "side-thread",
+    "btw"
+  ],
+  "license": "MIT",
+  "peerDependencies": {
+    "@earendil-works/pi-coding-agent": "*"
+  },
+  "pi": {
+    "extensions": [
+      "./src/index.ts"
+    ]
+  }
+}
