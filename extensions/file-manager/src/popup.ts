@@ -5,7 +5,11 @@ import {
   truncateToWidth,
   visibleWidth,
 } from "@earendil-works/pi-tui";
-import type { FileAction } from "./actions.ts";
+import {
+  availableFileActions,
+  type FileAction,
+  type FileActionCapabilities,
+} from "./actions.ts";
 import {
   fuzzyFiles,
   searchContent,
@@ -37,6 +41,7 @@ export async function openFileBrowserPopup(
   ctx: ExtensionContext,
   files: string[],
   binaries: SearchBinaries,
+  capabilities: FileActionCapabilities,
   state: BrowserState = { mode: "files", query: "" },
 ): Promise<BrowserOutcome | undefined> {
   let abortSearch: AbortController | undefined;
@@ -46,6 +51,13 @@ export async function openFileBrowserPopup(
     return await ctx.ui.custom<BrowserOutcome>(
       (tui, theme: Theme, keybindings, done) => {
         const input = new Input();
+        const actionDescriptors = availableFileActions(capabilities);
+        const actionByKey = new Map(
+          actionDescriptors.map((descriptor) => [
+            descriptor.key,
+            descriptor.action,
+          ]),
+        );
         input.setValue(state.query);
         let mode = state.mode;
         let editorMode: "normal" | "insert" = "normal";
@@ -132,17 +144,8 @@ export async function openFileBrowserPopup(
           });
         };
 
-        const actionForKey = (data: string): FileAction | undefined => {
-          const actions: Record<string, FileAction> = {
-            y: "copy",
-            r: "reveal",
-            z: "zed",
-            b: "bat",
-            n: "nvim",
-            d: "diff",
-          };
-          return actions[data.toLowerCase()];
-        };
+        const actionForKey = (data: string): FileAction | undefined =>
+          actionByKey.get(data.toLowerCase());
 
         void runSearch();
 
@@ -220,10 +223,16 @@ export async function openFileBrowserPopup(
               }
             }
             lines.push(border(`├${"─".repeat(inner)}┤`));
+            const actionHelp = actionDescriptors
+              .map(
+                (descriptor) =>
+                  `${descriptor.action === "zed" ? `${descriptor.key}/Enter` : descriptor.key} ${descriptor.label}`,
+              )
+              .join(" · ");
             const help =
               editorMode === "insert"
                 ? "Esc normal · Tab files/content · ↑/↓ move · type to search"
-                : "i or / search · j/k move · Tab mode · y copy · r reveal · z/Enter Zed · b bat · n nvim · d diff · q close";
+                : `i or / search · j/k move · Tab mode · ${actionHelp} · q close`;
             lines.push(row(theme.fg("dim", help)));
             lines.push(border(`╰${"─".repeat(inner)}╯`));
             return lines.map((line) => truncateToWidth(line, width, ""));
@@ -288,7 +297,8 @@ export async function openFileBrowserPopup(
             } else if (data === "G") {
               selected = Math.max(0, matches.length - 1);
             } else if (keybindings.matches(data, "tui.select.confirm")) {
-              if (matches[selected]) finish("zed");
+              const editorAction = actionByKey.get("z");
+              if (matches[selected] && editorAction) finish(editorAction);
             } else {
               const action = actionForKey(data);
               if (action && matches[selected]) finish(action);

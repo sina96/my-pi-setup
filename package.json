@@ -17,10 +17,14 @@
   },
   "pi": {
     "extensions": [
+      "./extensions/herdr-agent-state.ts",
       "./extensions/*/src/index.ts"
     ],
     "themes": [
       "./themes/*.json"
+    ],
+    "prompts": [
+      "./extensions/token-optimizer/prompts/*.md"
     ]
   }
 }

@@ -13,22 +13,19 @@ import {
   SelectList,
   Text,
 } from "@earendil-works/pi-tui";
-
-interface RiskRule {
-  id: string;
-  label: string;
-  pattern: RegExp;
-  operations?: string;
-  source: "default" | "global" | "project" | "session";
-}
-
-interface StoredRule {
-  id: string;
-  label: string;
-  pattern: string;
-  flags?: string;
-  operations?: string;
-}
+import {
+  compileRule,
+  DEFAULT_PATH_RULES,
+  DEFAULT_RULES,
+  matchingRules,
+  pathConcernsForBash,
+  pathConcernsForTool,
+  SEVERITY_ORDER,
+  type PathConcern,
+  type RiskRule,
+  type Severity,
+  type StoredRule,
+} from "./policy.ts";
 
 interface RuleConfig {
   disabledRules?: unknown;
@@ -45,122 +42,16 @@ type RuleScope = "session" | "project" | "global";
 const ENTRY_TYPE = "simply-permission-gate-settings";
 const GLOBAL_CONFIG_PATH = join(getAgentDir(), "permission-gate.json");
 
-const DEFAULT_RULES: RiskRule[] = [
-  {
-    id: "recursive-file-deletion",
-    label: "recursive file deletion",
-    pattern: /\brm\b[^\n;&|]*(?:\s-[a-z]*r[a-z]*\b|\s--recursive\b)/i,
-    operations: "rm -r, rm -R, rm --recursive",
-    source: "default",
-  },
-  {
-    id: "privilege-escalation",
-    label: "privilege escalation",
-    pattern: /(?:^|[;&|]\s*|\s)(?:sudo|doas|su)(?:\s|$)/i,
-    operations: "sudo, doas, su",
-    source: "default",
-  },
-  {
-    id: "dangerous-permission-change",
-    label: "dangerous permission change",
-    pattern: /\b(?:chmod|chown)\b[^\n;&|]*(?:\b777\b|\s-[a-z]*R[a-z]*\b)/i,
-    operations: "chmod/chown 777 or recursive",
-    source: "default",
-  },
-  {
-    id: "environment-secret-exposure",
-    label: "environment or secret exposure",
-    pattern: /(?:^|[;&|]\s*|\s)(?:printenv|set)(?:\s|$)|(?:^|[;&|]\s*)env(?:\s|$)/i,
-    operations: "env, printenv, bare set",
-    source: "default",
-  },
-  {
-    id: "download-piped-to-shell",
-    label: "download piped into a shell",
-    pattern: /\b(?:curl|wget)\b[^\n]*(?:\||>)\s*(?:sudo\s+)?(?:ba|z|fi|da)?sh\b/i,
-    operations: "curl/wget piped or redirected to a shell",
-    source: "default",
-  },
-  {
-    id: "destructive-git-operation",
-    label: "destructive Git operation",
-    pattern: /\bgit\s+(?:reset\s+--hard\b|clean\s+[^\n;&|]*-[a-z]*f|push\s+[^\n;&|]*(?:--force(?:-with-lease)?\b|-f\b)|branch\s+-D\b|checkout\s+--\s+\.|restore\s+\.)/i,
-    operations: "git reset --hard, clean -f, force push, branch -D, checkout/restore .",
-    source: "default",
-  },
-  {
-    id: "disk-filesystem-operation",
-    label: "disk or filesystem operation",
-    pattern: /(?:^|[;&|]\s*|\s)(?:mkfs(?:\.\w+)?|fdisk|parted|dd)(?:\s|$)/i,
-    operations: "mkfs, fdisk, parted, dd",
-    source: "default",
-  },
-  {
-    id: "system-shutdown-reboot",
-    label: "system shutdown or reboot",
-    pattern: /(?:^|[;&|]\s*|\s)(?:shutdown|reboot|poweroff|halt)(?:\s|$)/i,
-    operations: "shutdown, reboot, poweroff, halt",
-    source: "default",
-  },
-  {
-    id: "container-destructive-cleanup",
-    label: "container-wide destructive cleanup",
-    pattern: /\b(?:docker|podman)\s+(?:system\s+prune|volume\s+prune|image\s+prune)\b/i,
-    operations: "docker/podman system, volume, or image prune",
-    source: "default",
-  },
-  {
-    id: "package-publication",
-    label: "package publication",
-    pattern: /\b(?:npm|pnpm|yarn)\s+(?:publish|unpublish)\b/i,
-    operations: "npm/pnpm/yarn publish or unpublish",
-    source: "default",
-  },
-];
-
 function stricterReadOnlyGateIsActive(): boolean {
   const globalState = globalThis as Record<string, unknown>;
   const local = globalState.__simplyPlanMode as { mode?: string } | undefined;
   const upstream = globalState.__planMode as { mode?: string } | undefined;
   const review = globalState.__simplyReview as { active?: boolean } | undefined;
-  return local?.mode === "plan" || upstream?.mode === "plan" || review?.active === true;
-}
-
-function compileRule(
-  value: unknown,
-  source: RiskRule["source"],
-): { rule?: RiskRule; error?: string } {
-  if (!value || typeof value !== "object") return { error: "rule must be an object" };
-  const candidate = value as Partial<StoredRule>;
-  if (typeof candidate.id !== "string" || !/^[a-z0-9][a-z0-9._-]*$/i.test(candidate.id)) {
-    return { error: "rule id must use letters, numbers, dots, underscores, or hyphens" };
-  }
-  if (typeof candidate.label !== "string" || !candidate.label.trim()) {
-    return { error: `rule ${candidate.id} needs a label` };
-  }
-  if (typeof candidate.pattern !== "string" || !candidate.pattern) {
-    return { error: `rule ${candidate.id} needs a pattern` };
-  }
-  const flags = candidate.flags ?? "i";
-  if (typeof flags !== "string" || !/^[imsu]*$/.test(flags) || new Set(flags).size !== flags.length) {
-    return { error: `rule ${candidate.id} has invalid flags; use only i, m, s, or u` };
-  }
-  if (candidate.operations !== undefined && typeof candidate.operations !== "string") {
-    return { error: `rule ${candidate.id} operations must be a string` };
-  }
-  try {
-    return {
-      rule: {
-        id: candidate.id,
-        label: candidate.label.trim(),
-        pattern: new RegExp(candidate.pattern, flags),
-        operations: candidate.operations?.trim() || undefined,
-        source,
-      },
-    };
-  } catch (error) {
-    return { error: `rule ${candidate.id} has an invalid regex: ${(error as Error).message}` };
-  }
+  return (
+    local?.mode === "plan" ||
+    upstream?.mode === "plan" ||
+    review?.active === true
+  );
 }
 
 async function readRuleConfig(
@@ -220,6 +111,7 @@ function storedRule(rule: RiskRule): StoredRule {
     label: rule.label,
     pattern: rule.pattern.source,
     flags: rule.pattern.flags,
+    severity: rule.severity,
     operations: rule.operations,
   };
 }
@@ -287,16 +179,33 @@ export default function permissionGate(pi: ExtensionAPI) {
   async function loadConfiguredRules(ctx: ExtensionContext): Promise<void> {
     const rules = new Map(DEFAULT_RULES.map((rule) => [rule.id, rule]));
     const errors: string[] = [];
-    applyRuleConfig(rules, await readRuleConfig(GLOBAL_CONFIG_PATH, "global", ctx), "global", errors);
+    applyRuleConfig(
+      rules,
+      await readRuleConfig(GLOBAL_CONFIG_PATH, "global", ctx),
+      "global",
+      errors,
+    );
 
     if (ctx.isProjectTrusted()) {
-      const projectPath = join(ctx.cwd, CONFIG_DIR_NAME, "permission-gate.json");
-      applyRuleConfig(rules, await readRuleConfig(projectPath, "project", ctx), "project", errors);
+      const projectPath = join(
+        ctx.cwd,
+        CONFIG_DIR_NAME,
+        "permission-gate.json",
+      );
+      applyRuleConfig(
+        rules,
+        await readRuleConfig(projectPath, "project", ctx),
+        "project",
+        errors,
+      );
     }
 
     configuredRules = rules;
     if (errors.length > 0 && ctx.hasUI) {
-      ctx.ui.notify(`Permission-gate config warnings:\n${errors.join("\n")}`, "warning");
+      ctx.ui.notify(
+        `Permission-gate config warnings:\n${errors.join("\n")}`,
+        "warning",
+      );
     }
   }
 
@@ -306,16 +215,23 @@ export default function permissionGate(pi: ExtensionAPI) {
     return [...rules.values()];
   }
 
-  function risksFor(command: string): string[] {
-    return allRules()
-      .filter((rule) => rule.pattern.test(command))
-      .map((rule) => rule.label);
+  function commandConcerns(command: string): PathConcern[] {
+    return matchingRules(command, allRules()).map((rule) => ({
+      label: rule.label,
+      detail: rule.operations ?? rule.pattern.source,
+      severity: rule.severity,
+    }));
   }
 
-  function configPathForScope(scope: Exclude<RuleScope, "session">, ctx: ExtensionContext): string {
+  function configPathForScope(
+    scope: Exclude<RuleScope, "session">,
+    ctx: ExtensionContext,
+  ): string {
     if (scope === "global") return GLOBAL_CONFIG_PATH;
     if (!ctx.isProjectTrusted()) {
-      throw new Error("Project rules can only be changed after this project is trusted");
+      throw new Error(
+        "Project rules can only be changed after this project is trusted",
+      );
     }
     return join(ctx.cwd, CONFIG_DIR_NAME, "permission-gate.json");
   }
@@ -323,10 +239,15 @@ export default function permissionGate(pi: ExtensionAPI) {
   async function showRuleList(ctx: ExtensionContext): Promise<void> {
     const scopeFor = (rule: RiskRule): RuleScope =>
       rule.source === "default" ? "global" : rule.source;
-    const order: Record<RuleScope, number> = { global: 0, project: 1, session: 2 };
+    const order: Record<RuleScope, number> = {
+      global: 0,
+      project: 1,
+      session: 2,
+    };
     const rules = allRules().sort(
       (left, right) =>
-        order[scopeFor(left)] - order[scopeFor(right)] || left.label.localeCompare(right.label),
+        order[scopeFor(left)] - order[scopeFor(right)] ||
+        left.label.localeCompare(right.label),
     );
     const counts = rules.reduce<Record<RuleScope, number>>(
       (result, rule) => {
@@ -342,11 +263,11 @@ export default function permissionGate(pi: ExtensionAPI) {
     const operationText = (rule: RiskRule): string =>
       rule.operations ?? `/${rule.pattern.source}/${rule.pattern.flags}`;
     const labelText = (rule: RiskRule): string =>
-      `${scopeFor(rule).toUpperCase().padEnd(7)} │ ${rule.label}  (${rule.id})`;
+      `${rule.severity.toUpperCase().padEnd(9)} │ ${scopeFor(rule).toUpperCase().padEnd(7)} │ ${rule.label}  (${rule.id})`;
 
     if (!ctx.hasUI) {
       ctx.ui.notify(
-        `Permission-gate rules (${rules.length})\n${summary}\n\n${rules
+        `Permission-gate command rules (${rules.length})\n${summary}\n\n${rules
           .map((rule) => `${labelText(rule)} │ ${operationText(rule)}`)
           .join("\n")}`,
         "info",
@@ -361,45 +282,67 @@ export default function permissionGate(pi: ExtensionAPI) {
         label: labelText(rule),
         description: operationText(rule),
       }));
-      selectedId = await ctx.ui.custom<string | null>((tui, theme, _keybindings, done) => {
-        const container = new Container();
-        container.addChild(new DynamicBorder((text: string) => theme.fg("accent", text)));
-        container.addChild(
-          new Text(
-            theme.fg("accent", theme.bold(`Permission-gate rules · ${rules.length} active`)) +
-              "\n" +
-              theme.fg("muted", summary),
-            1,
-            0,
-          ),
-        );
-        const list = new SelectList(items, Math.min(items.length, 12), {
-          selectedPrefix: (text) => theme.fg("accent", text),
-          selectedText: (text) => theme.fg("accent", text),
-          description: (text) => theme.fg("muted", text),
-          scrollInfo: (text) => theme.fg("dim", text),
-          noMatch: (text) => theme.fg("warning", text),
-        }, { minPrimaryColumnWidth: 34, maxPrimaryColumnWidth: 52 });
-        list.onSelect = (item) => done(item.value);
-        list.onCancel = () => done(null);
-        container.addChild(list);
-        container.addChild(
-          new Text(theme.fg("dim", "↑↓ navigate · enter inspect · esc close"), 1, 0),
-        );
-        container.addChild(new DynamicBorder((text: string) => theme.fg("accent", text)));
-        return {
-          render: (width: number) => container.render(width),
-          invalidate: () => container.invalidate(),
-          handleInput: (data: string) => {
-            list.handleInput(data);
-            tui.requestRender();
-          },
-        };
-      });
+      selectedId = await ctx.ui.custom<string | null>(
+        (tui, theme, _keybindings, done) => {
+          const container = new Container();
+          container.addChild(
+            new DynamicBorder((text: string) => theme.fg("accent", text)),
+          );
+          container.addChild(
+            new Text(
+              theme.fg(
+                "accent",
+                theme.bold(
+                  `Permission-gate command rules · ${rules.length} active`,
+                ),
+              ) +
+                "\n" +
+                theme.fg("muted", summary),
+              1,
+              0,
+            ),
+          );
+          const list = new SelectList(
+            items,
+            Math.min(items.length, 12),
+            {
+              selectedPrefix: (text) => theme.fg("accent", text),
+              selectedText: (text) => theme.fg("accent", text),
+              description: (text) => theme.fg("muted", text),
+              scrollInfo: (text) => theme.fg("dim", text),
+              noMatch: (text) => theme.fg("warning", text),
+            },
+            { minPrimaryColumnWidth: 34, maxPrimaryColumnWidth: 52 },
+          );
+          list.onSelect = (item) => done(item.value);
+          list.onCancel = () => done(null);
+          container.addChild(list);
+          container.addChild(
+            new Text(
+              theme.fg("dim", "↑↓ navigate · enter inspect · esc close"),
+              1,
+              0,
+            ),
+          );
+          container.addChild(
+            new DynamicBorder((text: string) => theme.fg("accent", text)),
+          );
+          return {
+            render: (width: number) => container.render(width),
+            invalidate: () => container.invalidate(),
+            handleInput: (data: string) => {
+              list.handleInput(data);
+              tui.requestRender();
+            },
+          };
+        },
+      );
     } else {
-      const options = rules.map((rule) => `${labelText(rule)} │ ${operationText(rule)}`);
+      const options = rules.map(
+        (rule) => `${labelText(rule)} │ ${operationText(rule)}`,
+      );
       const selected = await ctx.ui.select(
-        `Permission-gate rules · ${rules.length} active\n${summary}`,
+        `Permission-gate command rules · ${rules.length} active\n${summary}`,
         options,
       );
       selectedId = selected ? rules[options.indexOf(selected)]?.id : undefined;
@@ -408,15 +351,16 @@ export default function permissionGate(pi: ExtensionAPI) {
     const rule = rules.find((candidate) => candidate.id === selectedId);
     if (!rule) return;
     await ctx.ui.select(
-      `${rule.label}\n\nScope:      ${scopeFor(rule)}\nOrigin:     ${rule.source === "default" ? "built-in default" : rule.source}\nID:         ${rule.id}\nOperations: ${operationText(rule)}\nPattern:    /${rule.pattern.source}/${rule.pattern.flags}`,
+      `${rule.label}\n\nSeverity:   ${rule.severity}\nScope:      ${scopeFor(rule)}\nOrigin:     ${rule.source === "default" ? "built-in default" : rule.source}\nID:         ${rule.id}\nOperations: ${operationText(rule)}\nPattern:    /${rule.pattern.source}/${rule.pattern.flags}`,
       ["Close"],
     );
   }
 
   async function askPermission(
     ctx: ExtensionContext,
-    command: string,
-    risks: string[],
+    subject: string,
+    concerns: PathConcern[],
+    allowSessionApproval: boolean,
   ): Promise<"once" | "session" | "deny"> {
     let release!: () => void;
     const previous = promptQueue;
@@ -425,17 +369,46 @@ export default function permissionGate(pi: ExtensionAPI) {
     });
 
     await previous;
-    pi.events.emit("herdr:blocked", { active: true, label: "Waiting for command approval" });
+    const highest = concerns.reduce<Severity>(
+      (result, concern) =>
+        SEVERITY_ORDER[concern.severity] > SEVERITY_ORDER[result]
+          ? concern.severity
+          : result,
+      "risky",
+    );
+    const timeout =
+      highest === "critical"
+        ? 15_000
+        : highest === "dangerous"
+          ? 30_000
+          : 60_000;
+    const labels = concerns.map(
+      (concern) => `${concern.severity.toUpperCase()}: ${concern.label}`,
+    );
+    const choices =
+      highest === "critical"
+        ? ["Deny", "Allow once"]
+        : [
+            "Allow once",
+            ...(allowSessionApproval
+              ? ["Allow this exact command for this session"]
+              : []),
+            "Deny",
+          ];
+
+    pi.events.emit("herdr:blocked", {
+      active: true,
+      label: `Waiting for ${highest} permission approval`,
+    });
     try {
-      const title = ctx.mode === "tui"
-        ? `Permission required\nRisk: ${risks.join(", ")}\nReview the pending bash command above, then choose.`
-        : `Permission required · ${risks.join(", ")}\n\n$ ${command}`;
-      const choice = await ctx.ui.select(
-        title,
-        ["Allow once", "Allow this exact command for this session", "Deny"],
-      );
+      const title =
+        ctx.mode === "tui"
+          ? `Permission required\n${labels.join("\n")}\nReview the pending tool call above, then choose.`
+          : `Permission required · ${labels.join(", ")}\n\n${subject}`;
+      const choice = await ctx.ui.select(title, choices, { timeout });
       if (choice === "Allow once") return "once";
-      if (choice === "Allow this exact command for this session") return "session";
+      if (choice === "Allow this exact command for this session")
+        return "session";
       return "deny";
     } finally {
       pi.events.emit("herdr:blocked", { active: false });
@@ -444,6 +417,7 @@ export default function permissionGate(pi: ExtensionAPI) {
   }
 
   pi.on("session_start", async (_event, ctx) => {
+    sessionApprovals.clear();
     restoreSessionSettings(ctx);
     await loadConfiguredRules(ctx);
   });
@@ -453,26 +427,66 @@ export default function permissionGate(pi: ExtensionAPI) {
   });
 
   pi.on("tool_call", async (event, ctx) => {
-    if (event.toolName !== "bash" || yoloMode) return;
+    if (yoloMode) return;
 
-    const command = String((event.input as { command?: unknown }).command ?? "").trim();
-    if (!command || sessionApprovals.has(command)) return;
+    const toolName = String(event.toolName);
+    const input = event.input as Record<string, unknown>;
 
-    const risks = risksFor(command);
-    if (risks.length === 0) return;
+    if (toolName !== "bash") {
+      const { concerns, info } = pathConcernsForTool(toolName, input);
+      for (const message of info) ctx.ui.notify(message, "info");
+      if (concerns.length === 0) return;
+
+      const detail = concerns.map((concern) => concern.detail).join(", ");
+      if (!ctx.hasUI) {
+        return {
+          block: true,
+          reason: `[permission-gate] Blocked sensitive path access without interactive approval (${detail})`,
+        };
+      }
+      const decision = await askPermission(
+        ctx,
+        `${toolName}: ${detail}`,
+        concerns,
+        false,
+      );
+      if (decision === "once") return;
+      return {
+        block: true,
+        reason: `[permission-gate] User denied sensitive path access (${detail})`,
+      };
+    }
+
+    const command = String(input.command ?? "").trim();
+    if (!command) return;
+    const concerns = [
+      ...commandConcerns(command),
+      ...pathConcernsForBash(command),
+    ];
+    if (concerns.length === 0) return;
+
+    const highest = concerns.reduce<Severity>(
+      (result, concern) =>
+        SEVERITY_ORDER[concern.severity] > SEVERITY_ORDER[result]
+          ? concern.severity
+          : result,
+      "risky",
+    );
+    if (sessionApprovals.has(command) && highest !== "critical") return;
 
     // PLAN mode has its own stricter bash gate and will reject mutations. Avoid
     // asking the user to approve a command that plan-mode will block anyway.
     if (stricterReadOnlyGateIsActive()) return;
 
+    const labels = concerns.map((concern) => concern.label);
     if (!ctx.hasUI) {
       return {
         block: true,
-        reason: `[permission-gate] Blocked without interactive approval (${risks.join(", ")}): ${command}`,
+        reason: `[permission-gate] Blocked without interactive approval (${labels.join(", ")}): ${command}`,
       };
     }
 
-    const decision = await askPermission(ctx, command, risks);
+    const decision = await askPermission(ctx, `$ ${command}`, concerns, true);
     if (decision === "session") {
       sessionApprovals.add(command);
       ctx.ui.notify("Exact command allowed for this session", "info");
@@ -482,12 +496,13 @@ export default function permissionGate(pi: ExtensionAPI) {
 
     return {
       block: true,
-      reason: `[permission-gate] User denied command (${risks.join(", ")}): ${command}`,
+      reason: `[permission-gate] User denied command (${labels.join(", ")}): ${command}`,
     };
   });
 
   pi.registerCommand("permission-gate", {
-    description: "Manage permission-gate rules, approvals, and session yolo mode",
+    description:
+      "Manage permission-gate rules, approvals, and session yolo mode",
     handler: async (args, ctx) => {
       const input = args.trim();
       const [rawAction = "status", ...restParts] = input.split(/\s+/);
@@ -497,7 +512,7 @@ export default function permissionGate(pi: ExtensionAPI) {
       if (action === "status") {
         const rules = allRules();
         ctx.ui.notify(
-          `Permission gate ${yoloMode ? "DISABLED (yolo mode)" : "active"} · ${rules.length} rules (${sessionRules.size} session) · ${sessionApprovals.size} exact-command approval${sessionApprovals.size === 1 ? "" : "s"}`,
+          `Permission gate ${yoloMode ? "DISABLED (yolo mode)" : "active"} · ${rules.length} command rules (${sessionRules.size} session) · ${DEFAULT_PATH_RULES.length} path rules · ${sessionApprovals.size} exact-command approval${sessionApprovals.size === 1 ? "" : "s"}`,
           yoloMode ? "warning" : "info",
         );
         return;
@@ -505,7 +520,10 @@ export default function permissionGate(pi: ExtensionAPI) {
 
       if (action === "clear") {
         sessionApprovals.clear();
-        ctx.ui.notify("Permission-gate exact-command approvals cleared", "info");
+        ctx.ui.notify(
+          "Permission-gate exact-command approvals cleared",
+          "info",
+        );
         return;
       }
 
@@ -514,7 +532,10 @@ export default function permissionGate(pi: ExtensionAPI) {
         if (!mode || mode === "on") yoloMode = true;
         else if (mode === "off") yoloMode = false;
         else if (mode !== "status") {
-          ctx.ui.notify("Usage: /permission-gate yolo-mode [on|off|status]", "warning");
+          ctx.ui.notify(
+            "Usage: /permission-gate yolo-mode [on|off|status]",
+            "warning",
+          );
           return;
         }
         persistSessionSettings();
@@ -559,16 +580,24 @@ export default function permissionGate(pi: ExtensionAPI) {
               rules: [
                 ...rules.filter(
                   (rule) =>
-                    !rule || typeof rule !== "object" || (rule as { id?: unknown }).id !== id,
+                    !rule ||
+                    typeof rule !== "object" ||
+                    (rule as { id?: unknown }).id !== id,
                 ),
                 value,
               ],
               changed: true,
             }));
             await loadConfiguredRules(ctx);
-            ctx.ui.notify(`${scope === "global" ? "Global" : "Project"} rule saved: ${id}\n${path}`, "info");
+            ctx.ui.notify(
+              `${scope === "global" ? "Global" : "Project"} rule saved: ${id}\n${path}`,
+              "info",
+            );
           } catch (error) {
-            ctx.ui.notify(`Could not save ${scope} rule: ${(error as Error).message}`, "warning");
+            ctx.ui.notify(
+              `Could not save ${scope} rule: ${(error as Error).message}`,
+              "warning",
+            );
           }
           return;
         }
@@ -577,7 +606,8 @@ export default function permissionGate(pi: ExtensionAPI) {
           /^remove\s+(?:(session|project|global)\s+)?([a-z0-9][a-z0-9._-]*)$/i,
         );
         if (removeMatch) {
-          const scope = (removeMatch[1]?.toLowerCase() ?? "session") as RuleScope;
+          const scope = (removeMatch[1]?.toLowerCase() ??
+            "session") as RuleScope;
           const id = removeMatch[2];
 
           if (scope === "session") {
@@ -595,18 +625,29 @@ export default function permissionGate(pi: ExtensionAPI) {
             const changed = await editRuleFile(path, (rules) => {
               const filtered = rules.filter(
                 (rule) =>
-                  !rule || typeof rule !== "object" || (rule as { id?: unknown }).id !== id,
+                  !rule ||
+                  typeof rule !== "object" ||
+                  (rule as { id?: unknown }).id !== id,
               );
-              return { rules: filtered, changed: filtered.length !== rules.length };
+              return {
+                rules: filtered,
+                changed: filtered.length !== rules.length,
+              };
             });
             if (!changed) {
               ctx.ui.notify(`No ${scope} rule named ${id}`, "warning");
               return;
             }
             await loadConfiguredRules(ctx);
-            ctx.ui.notify(`${scope === "global" ? "Global" : "Project"} rule removed: ${id}`, "info");
+            ctx.ui.notify(
+              `${scope === "global" ? "Global" : "Project"} rule removed: ${id}`,
+              "info",
+            );
           } catch (error) {
-            ctx.ui.notify(`Could not remove ${scope} rule: ${(error as Error).message}`, "warning");
+            ctx.ui.notify(
+              `Could not remove ${scope} rule: ${(error as Error).message}`,
+              "warning",
+            );
           }
           return;
         }

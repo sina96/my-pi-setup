@@ -1,0 +1,15 @@
+{
+  "name": "simply-herdr-blocked-state",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Reports Pi extension user-input waits as blocked state to Herdr",
+  "keywords": ["pi-package", "pi-extension", "herdr", "blocked-state"],
+  "license": "MIT",
+  "type": "module",
+  "peerDependencies": {
+    "@earendil-works/pi-coding-agent": "*"
+  },
+  "pi": {
+    "extensions": ["./src/index.ts"]
+  }
+}

@@ -1,5 +1,5 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
-import { performAction } from "./actions.ts";
+import { discoverFileActionCapabilities, performAction } from "./actions.ts";
 import { openFileBrowserPopup, type BrowserState } from "./popup.ts";
 import { discoverBinaries, discoverFiles } from "./search.ts";
 
@@ -33,9 +33,16 @@ export default function fileManager(pi: ExtensionAPI): void {
         return;
       }
 
+      const capabilities = discoverFileActionCapabilities();
       let state: BrowserState = { mode: "files", query: "" };
       for (;;) {
-        const outcome = await openFileBrowserPopup(ctx, files, binaries, state);
+        const outcome = await openFileBrowserPopup(
+          ctx,
+          files,
+          binaries,
+          capabilities,
+          state,
+        );
         if (!outcome || outcome.action === "close") return;
         state = { mode: outcome.mode, query: outcome.query };
         if (!outcome.match) continue;

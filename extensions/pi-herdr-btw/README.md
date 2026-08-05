@@ -21,7 +21,7 @@ This local adaptation is based on Oscar Gabriel's MIT-licensed [`pi-herdr-btw`](
 
 ## Install
 
-This extension is included in the repository's Pi package and is loaded by the root package configuration. Install or update the complete setup, then run `/reload` or restart Pi.
+This extension is included in the repository's Pi package and is loaded by the root package configuration. Its parent `/btw` command is registered only when Pi starts in a Herdr-managed pane; outside Herdr it is omitted from command completion instead of failing when selected. Child mode remains available for panes launched by the extension. Install or update the complete setup, then run `/reload` or restart Pi.
 
 ## Usage
 
@@ -55,7 +55,7 @@ Run `/btw config` to show current defaults.
 /btw config reset
 ```
 
-Settings are stored in Pi's agent directory (`~/.pi/agent/pi-herdr-btw.json` by default).
+Settings are stored in Pi's agent directory (`~/.pi/agent/pi-herdr-btw.json` by default). Because `/btw` is hidden outside Herdr, configuration commands are run from a Herdr-managed Pi session.
 
 ## Prompt cache
 

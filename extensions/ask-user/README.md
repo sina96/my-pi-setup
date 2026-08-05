@@ -16,7 +16,10 @@ The agent can ask one focused question with:
 - `herdr:blocked` events while waiting
 
 It uses Pi's built-in `select` and `input` dialogs instead of maintaining a large
-custom TUI. There are no runtime dependencies beyond Pi.
+custom TUI. There are no runtime dependencies beyond Pi. In this root setup,
+`herdr-blocked-state` forwards the tool's `herdr:blocked` events to Herdr; install
+that reporter alongside an independent ask-user installation when blocked-state
+reporting is wanted.
 
 ## When the upstream package is better
 

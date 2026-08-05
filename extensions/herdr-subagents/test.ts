@@ -95,7 +95,37 @@ test("renders and navigates the subagent popup", () => {
   );
 });
 
+test("does not register commands or tools outside Herdr", () => {
+  const previous = {
+    herdr: process.env.HERDR_ENV,
+    pane: process.env.HERDR_PANE_ID,
+  };
+  delete process.env.HERDR_ENV;
+  delete process.env.HERDR_PANE_ID;
+  const commands: string[] = [];
+  const tools: string[] = [];
+  try {
+    extension({
+      registerCommand: (name: string) => commands.push(name),
+      registerTool: (tool: { name: string }) => tools.push(tool.name),
+    } as never);
+    assert.deepEqual(commands, []);
+    assert.deepEqual(tools, []);
+  } finally {
+    if (previous.herdr == null) delete process.env.HERDR_ENV;
+    else process.env.HERDR_ENV = previous.herdr;
+    if (previous.pane == null) delete process.env.HERDR_PANE_ID;
+    else process.env.HERDR_PANE_ID = previous.pane;
+  }
+});
+
 test("starts with subagent tools inactive", async () => {
+  const previous = {
+    herdr: process.env.HERDR_ENV,
+    pane: process.env.HERDR_PANE_ID,
+  };
+  process.env.HERDR_ENV = "1";
+  process.env.HERDR_PANE_ID = "w1:p1";
   const handlers = new Map<string, Function[]>();
   let active = [
     "read",
@@ -123,9 +153,16 @@ test("starts with subagent tools inactive", async () => {
     sessionManager: { getSessionId: () => "test-session" },
     isIdle: () => true,
   };
-  for (const handler of handlers.get("session_start") ?? [])
-    await handler({ reason: "startup" }, ctx);
-  assert.deepEqual(active, ["read"]);
-  for (const handler of handlers.get("session_shutdown") ?? [])
-    await handler({ reason: "quit" }, ctx);
+  try {
+    for (const handler of handlers.get("session_start") ?? [])
+      await handler({ reason: "startup" }, ctx);
+    assert.deepEqual(active, ["read"]);
+    for (const handler of handlers.get("session_shutdown") ?? [])
+      await handler({ reason: "quit" }, ctx);
+  } finally {
+    if (previous.herdr == null) delete process.env.HERDR_ENV;
+    else process.env.HERDR_ENV = previous.herdr;
+    if (previous.pane == null) delete process.env.HERDR_PANE_ID;
+    else process.env.HERDR_PANE_ID = previous.pane;
+  }
 });

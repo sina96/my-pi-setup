@@ -387,13 +387,15 @@ test("parent command routes ask, help, and unknown words by exact first word", a
   });
 });
 
-test("config routes before Herdr and model launch checks", async () => {
+test("does not register the parent command outside Herdr", async () => {
   const previous = {
     payload: process.env.PI_HERDR_BTW_PAYLOAD,
     herdr: process.env.HERDR_ENV,
+    pane: process.env.HERDR_PANE_ID,
   };
   delete process.env.PI_HERDR_BTW_PAYLOAD;
-  delete process.env.HERDR_ENV; // not inside Herdr at all
+  delete process.env.HERDR_ENV;
+  delete process.env.HERDR_PANE_ID;
   try {
     const store = new FakeStore();
     const harness = await createHarness(store, async () => ({
@@ -401,18 +403,15 @@ test("config routes before Herdr and model launch checks", async () => {
       stdout: "",
       stderr: "",
     }));
-    const ctx = createCommandContext();
-    ctx.model = undefined; // and no model either
-    await harness.commands.get("btw")?.handler("config auto-submit on", ctx);
     harness.cleanup();
 
-    assert.equal(harness.configStore.config.autoSubmit, true);
-    assert.equal(ctx.notifications.at(-1)?.type, "info");
+    assert.equal(harness.commands.has("btw"), false);
     assert.equal(harness.execCalls.length, 0);
   } finally {
     if (previous.payload !== undefined)
       process.env.PI_HERDR_BTW_PAYLOAD = previous.payload;
     if (previous.herdr !== undefined) process.env.HERDR_ENV = previous.herdr;
+    if (previous.pane !== undefined) process.env.HERDR_PANE_ID = previous.pane;
   }
 });
 

@@ -479,6 +479,8 @@ export async function registerBtwExtension(
     return;
   }
 
+  if (process.env.HERDR_ENV !== "1" || !process.env.HERDR_PANE_ID) return;
+
   const configStore = options.configStore ?? new ConfigStore();
 
   // --- Parent-side merge coordination ---------------------------------

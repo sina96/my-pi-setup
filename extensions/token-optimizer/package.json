@@ -1,13 +1,14 @@
 {
-  "name": "simply-permission-gate",
+  "name": "simply-token-optimizer",
   "version": "0.1.0",
   "private": true,
-  "description": "A configurable interactive safety gate for risky Pi bash commands",
+  "description": "Session-scoped output, coding, and tool-result token optimization for Pi",
   "keywords": [
     "pi-package",
     "pi-extension",
-    "permissions",
-    "safety"
+    "tokens",
+    "optimizer",
+    "rtk"
   ],
   "license": "MIT",
   "type": "module",
@@ -21,6 +22,9 @@
   "pi": {
     "extensions": [
       "./src/index.ts"
+    ],
+    "prompts": [
+      "./prompts/*.md"
     ]
   }
 }

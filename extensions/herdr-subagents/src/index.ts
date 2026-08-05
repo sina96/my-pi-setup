@@ -128,6 +128,8 @@ export default function herdrSubagents(pi: ExtensionAPI): void {
     return;
   }
 
+  if (process.env.HERDR_ENV !== "1" || !process.env.HERDR_PANE_ID) return;
+
   const manager = getManager();
   let enabled = manager.enabled;
   let sessionCtx: ExtensionContext | undefined;

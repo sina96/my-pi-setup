@@ -1,41 +1,47 @@
 # simply-permission-gate
 
-An interactive safety gate for risky `bash` commands, inspired by
-[`adrianapan/pikit/agent/extensions/permission-gate`](https://github.com/adrianapan/pikit/tree/7b6040512b8d005fe5035a60c321b2a0d71b1679/agent/extensions/permission-gate).
+An interactive safety gate for risky shell commands and sensitive file access,
+inspired by
+[`adrianapan/pikit/agent/extensions/permission-gate`](https://github.com/adrianapan/pikit/tree/7b6040512b8d005fe5035a60c321b2a0d71b1679/agent/extensions/permission-gate)
+and informed by
+[`@xynogen/pix-gate`](https://github.com/xynogen/pix-mono/tree/61da59bb2a954b6af894f55924f7c14eed2d0b0e/packages/pix-gate).
 
-Ordinary commands pass through without UI. Commands matching a risk rule require
-an explicit decision:
+Ordinary operations pass through without UI. Matched operations are classified:
 
-- **Allow once**
-- **Allow this exact command for this session**
-- **Deny** (also the result of Escape/cancellation)
+- **Critical** — deny-first, 15-second timeout, allow once only
+- **Dangerous** — allow-first, 30-second timeout, with exact-command session approval for Bash
+- **Risky** — allow-first, 60-second timeout, with exact-command session approval for Bash
 
-In headless, print, JSON, or other sessions without interactive UI, matched
-commands are denied by default.
+Escape, cancellation, and every timeout deny. In headless, print, JSON, or other
+sessions without interactive UI, every matched command or path access is denied
+regardless of severity.
 
 ## Built-in rules
 
 The gate asks before:
 
-- Recursive `rm`
+- Recursive `rm`; deleting `/`, `~`, or `$HOME` with recursive force is critical
 - `sudo`, `doas`, or `su`
 - `chmod`/`chown` with `777` or recursive operation
 - Environment dumps through `env`, `printenv`, or bare `set`
-- `curl`/`wget` piped or redirected into a shell
-- Destructive Git commands such as `reset --hard`, force push, `clean -f`, and
-  deleting a branch with `-D`
-- Disk/filesystem tools such as `mkfs`, `fdisk`, `parted`, and `dd`
+- `curl`/`wget` piped or redirected into a shell (critical)
+- Destructive Git commands such as `reset --hard`, force push, `clean -f`,
+  deleting a branch with `-D`, forced checkout, and `stash drop`
+- Filesystem formatting, partitioning, raw-device writes, and `dd`
+- Fork bombs and `kill -9 -1`
 - Shutdown/reboot commands
-- Docker/Podman system, image, and volume pruning
+- Docker/Podman pruning, forced container removal, and volume removal
 - npm/pnpm/yarn publication or unpublication
+- Shell redirection into `.env` files
 
-Use `/permission-gate rule list` to open the rule browser. Each row starts with
+Use `/permission-gate rule list` to open the command-rule browser. Each row starts with
 the effective scope (`GLOBAL`, `PROJECT`, or `SESSION`) and shows the rule name,
 ID, and as much of its guarded operations as fits on one line. Built-in defaults
 appear under `GLOBAL`; selecting one identifies its origin as a built-in default.
 Custom rules show their regex when no friendly operation summary is configured.
+The browser also shows each rule's effective severity.
 
-The browser shows only effective rules. When a project or session rule replaces
+The browser shows only effective command rules. When a project or session rule replaces
 an inherited rule with the same ID, the overridden version is omitted.
 
 ## Rule scopes and precedence
@@ -76,8 +82,9 @@ Use the same command shape for session, project, and global rules:
 /permission-gate rule add global all-git All Git operations :: \bgit\b
 ```
 
-Rules added by command are case-insensitive. Edit the JSON directly when you
-need other regex flags or want to use `disabledRules`.
+Rules added by command are case-insensitive and default to `dangerous`. Edit the
+JSON directly when you need another severity (`critical`, `dangerous`, or
+`risky`), other regex flags, or `disabledRules`.
 
 ### Global rules
 
@@ -91,7 +98,8 @@ Create `~/.pi/agent/permission-gate.json` to apply rules in every project:
       "id": "all-git-operations",
       "label": "all Git operations",
       "pattern": "\\bgit\\b",
-      "flags": "i"
+      "flags": "i",
+      "severity": "risky"
     }
   ]
 }
@@ -116,7 +124,8 @@ Create `.pi/permission-gate.json` in a project:
       "id": "production-deploy",
       "label": "production deployment",
       "pattern": "\\bdeploy\\s+(?:--env[= ]|)(?:prod|production)\\b",
-      "flags": "i"
+      "flags": "i",
+      "severity": "critical"
     }
   ]
 }
@@ -212,7 +221,8 @@ configured rule returns when the session rule is removed.
 
 ## YOLO mode
 
-Disable all permission-gate prompts for the current session branch:
+Disable all command and sensitive-path permission prompts for the current
+session branch:
 
 ```text
 /permission-gate yolo-mode
@@ -248,12 +258,33 @@ preserving the complete command in the normal tool-call display.
 
 “Allow this exact command for this session” approves only the trimmed command
 string. A changed argument, path, flag, or shell expression is evaluated again.
-Exact-command approvals are kept in memory and disappear when Pi exits.
+Critical operations and direct file/search tool access never offer persistent
+approval. Exact-command approvals are cleared for each fresh Pi session and
+when the extension reloads.
 
 ```text
 /permission-gate status   Show gate, rule, and approval status
 /permission-gate clear    Forget exact-command approvals
 ```
+
+## Sensitive-path protection
+
+The gate also checks explicit paths used by Pi's `read`, `write`, and `edit`
+tools and this setup's `simply_find` and `simply_grep` tools. Bash commands get a
+conservative explicit-path scan as a secondary guard.
+
+Deny-first protection covers SSH private keys, keystores, cloud/service
+credentials, and `.netrc`. Warnings cover PEM files, real `.env` files (but not
+`.env.example`, `.env.sample`, or `.env.template`), package registry credentials,
+secret files, and `.ssh` directories. Writes into `.git` and `node_modules`
+produce informational notices. A broad `simply_grep` search with `hidden: true`
+is classified as risky because it can include credential files; ordinary
+`simply_find` only lists names and is not prompted unless its explicit search
+path is itself sensitive.
+
+Path matching is intentionally conservative and still is not a data-loss
+prevention sandbox. Search tools, aliases, extension-owned subprocesses, and
+indirect paths can evade regex inspection.
 
 ## Read-only mode integration
 
@@ -265,19 +296,23 @@ responsible for blocking the command.
 ## Herdr integration
 
 While an approval dialog is open, the extension emits `herdr:blocked` so Herdr
-can show that the agent is waiting for user input. Concurrent approval requests
-are serialized to avoid overlapping dialogs.
+can show that the agent is waiting for user input. The root setup's
+`herdr-blocked-state` extension forwards that event to Herdr's socket; install it
+alongside an independent permission-gate installation when this integration is
+wanted. Concurrent approval requests are serialized to avoid overlapping
+dialogs.
 
 ## Limits
 
-This is a guardrail, not a shell parser or security sandbox. Regex rules can have
-false negatives and false positives, aliases/functions can hide behavior, and
-apparently safe programs can have side effects. Review commands before approval
-and use an OS/container sandbox for untrusted work.
+This is a guardrail, not a shell parser, data-loss prevention system, or security
+sandbox. Regex rules can have false negatives and false positives,
+aliases/functions can hide behavior, and apparently safe programs can have side
+effects. Review operations before approval and use an OS/container sandbox for
+untrusted work.
 
-The extension gates only the agent's `bash` tool. Pi's `write` and `edit` tools,
-user-entered `!` commands, and shell execution inside other extension tools are
-not prompted.
+The extension gates the agent's `bash`, `read`, `write`, `edit`, `simply_find`,
+and `simply_grep` tool calls. User-entered `!` commands, other custom tools, and
+shell execution performed internally by extensions are not prompted.
 
 ## Try without installing
 

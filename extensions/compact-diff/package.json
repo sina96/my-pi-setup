@@ -1,13 +1,16 @@
 {
-  "name": "simply-permission-gate",
+  "name": "simply-compact-diff",
   "version": "0.1.0",
   "private": true,
-  "description": "A configurable interactive safety gate for risky Pi bash commands",
+  "description": "Compact Git diff popup with Pi analysis drafts and external file actions",
   "keywords": [
     "pi-package",
     "pi-extension",
-    "permissions",
-    "safety"
+    "git",
+    "diff",
+    "herdr",
+    "neovim",
+    "zed"
   ],
   "license": "MIT",
   "type": "module",

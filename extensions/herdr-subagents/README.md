@@ -2,7 +2,7 @@
 
 Toggleable asynchronous Pi subagents running in dedicated [Herdr](https://herdr.dev) tabs.
 
-The extension is **off by default in every session**. Start Pi inside Herdr, then enable it:
+The parent command and model tools are registered only when Pi starts inside a Herdr-managed pane, so `/subagents` does not appear in command completion elsewhere. Inside Herdr, the extension is **off by default in every session**; enable it with:
 
 ```text
 /subagents on
