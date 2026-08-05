@@ -37,6 +37,7 @@ A modular, shareable [Pi](https://pi.dev) coding environment. Each customization
 - [`session-insights`](extensions/session-insights/README.md) — Adds a tabbed Neovim-style `/usage` popup for session, token, cost, model, project, tool, and current-context insights.
 - [`simply-file-search`](extensions/simply-file-search/README.md) — Registers fast `simply_find` and `simply_grep` tools backed by `fd`, `rg`, and optional fuzzy ranking through `fzf`.
 - [`starship-statusline`](extensions/starship-statusline/README.md) — Adds a configurable Starship-powered footer with model and Git information.
+- [`task-list`](extensions/task-list/README.md) — Gives the agent a session-persistent task list and visualizes pending, active, and completed work above the editor.
 - [`theme-picker`](extensions/theme-picker/README.md) — Adds `/theme` with fuzzy search, live preview, rollback on cancellation, and global theme persistence.
 - [`token-optimizer`](extensions/token-optimizer/README.md) — Adds default-off, session-scoped output, coding, and RTK token controls via `/tokens`, plus a one-shot `/brief` prompt.
 - [`whimsical`](extensions/whimsical/README.md) — Replaces the working message with hundreds of playful first-turn and follow-up phrases, toggled with `/whimsy`.
@@ -54,6 +55,10 @@ ask your agent to install them when you need them.
 
 **Herdr only:** `extensions/herdr-agent-state.ts` is generated and managed by Herdr and is loaded explicitly by the root package so `ask_user` and permission prompts can report blocked state. It is not a portable custom extension; put custom extensions beside it rather than editing it.
 
+
+## Skills
+
+- [`summarize`](skills/summarize/SKILL.md) — Converts URLs, PDFs, Office documents, HTML, and text into Markdown, with optional isolated summarization using a configurable lightweight model.
 
 ## Themes
 
