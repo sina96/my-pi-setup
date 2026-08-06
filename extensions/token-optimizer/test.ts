@@ -3,14 +3,22 @@ import { chmodSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
-import tokenOptimizer, { offerRtkInstall } from "./src/index.ts";
+import tokenOptimizer, {
+  buildOptimizerInsights,
+  offerRtkInstall,
+} from "./src/index.ts";
 import {
   codingPrompt,
   DEFAULT_STATE,
   isOptimizerState,
+  optionGuidance,
   outputPrompt,
 } from "./src/modes.ts";
-import { openOptimizerPopup, optimizerRows } from "./src/popup.ts";
+import {
+  insightRecommendation,
+  openOptimizerPopup,
+  optimizerRows,
+} from "./src/popup.ts";
 import { rewriteRtkCommand } from "./src/rtk.ts";
 
 test("builds brief and safety-aware optimization prompts", () => {
@@ -27,6 +35,37 @@ test("validates persisted session state", () => {
   assert.equal(
     isOptimizerState({ output: "tiny", coding: "off", rtk: false }),
     false,
+  );
+});
+
+test("provides guidance for every optimizer option", () => {
+  assert.match(optionGuidance("output", "brief").bestFor, /default/);
+  assert.match(optionGuidance("coding", "ponytail-ultra").tradeoff, /push back/);
+  assert.match(optionGuidance("rtk", true).summary, /supported shell commands/);
+});
+
+test("builds deterministic recommendations from current session activity", () => {
+  const insights = buildOptimizerInsights(
+    {
+      getContextUsage: () => ({ tokens: 80, contextWindow: 100, percent: 80 }),
+      sessionManager: {
+        getBranch: () => [
+          ...Array.from({ length: 5 }, () => ({
+            type: "message",
+            message: { role: "toolResult", toolName: "bash" },
+          })),
+          { type: "message", message: { role: "toolResult", toolName: "read" } },
+        ],
+      },
+    } as never,
+    true,
+  );
+
+  assert.deepEqual(insights, { contextPercent: 80, bashCalls: 5, rtkAvailable: true });
+  assert.match(insightRecommendation(insights, DEFAULT_STATE), /enabling RTK/);
+  assert.match(
+    insightRecommendation(insights, { ...DEFAULT_STATE, rtk: true }),
+    /RTK is enabled/,
   );
 });
 
@@ -124,6 +163,41 @@ test("popup supports Vim and arrow-style cycling", async () => {
   });
   assert.equal(changes[0]?.output, "brief");
   assert.equal(changes[1]?.coding, "ponytail-lite");
+});
+
+test("popup toggles a full comparison view with question mark", async () => {
+  const ctx = {
+    ui: {
+      custom: async (factory: Function) => {
+        let rendered = "";
+        const component = factory(
+          { requestRender() {} },
+          {
+            fg: (_color: string, text: string) => text,
+            bg: (_color: string, text: string) => text,
+            bold: (text: string) => text,
+          },
+          { matches: () => false },
+          () => {},
+        );
+        assert.match(component.render(80).join("\n"), /Session insight/);
+        component.handleInput("?");
+        rendered = component.render(80).join("\n");
+        assert.match(rendered, /comparison/);
+        assert.match(rendered, /ponytail-ultra/);
+        component.handleInput("?");
+        assert.doesNotMatch(component.render(80).join("\n"), /comparison/);
+      },
+    },
+  };
+
+  await openOptimizerPopup(
+    ctx as never,
+    { ...DEFAULT_STATE },
+    false,
+    () => {},
+    { contextPercent: 30, bashCalls: 0, rtkAvailable: false },
+  );
 });
 
 test("popup exposes the RTK installer only when RTK is unavailable", async () => {

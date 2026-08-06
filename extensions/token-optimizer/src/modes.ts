@@ -27,6 +27,92 @@ export const DEFAULT_STATE: OptimizerState = {
   rtk: false,
 };
 
+export type OptionGuidance = {
+  summary: string;
+  bestFor: string;
+  tradeoff: string;
+  badge?: string;
+};
+
+export const OUTPUT_GUIDANCE: Record<OutputMode, OptionGuidance> = {
+  off: {
+    summary: "Leaves assistant response length and style unchanged.",
+    bestFor: "Detailed explanations, learning, and unfamiliar work.",
+    tradeoff: "Uses the most output tokens.",
+  },
+  brief: {
+    summary: "Adds the small instruction ‘Be brief.’ without imposing a special writing style.",
+    bestFor: "A low-friction default for most sessions.",
+    tradeoff: "May omit background detail unless you request it.",
+    badge: "suggested default",
+  },
+  "caveman-lite": {
+    summary: "Removes filler and repetition while retaining professional sentences.",
+    bestFor: "Readable but consistently compact technical work.",
+    tradeoff: "Provides less narrative explanation than normal output.",
+  },
+  "caveman-full": {
+    summary: "Uses terse sentences and fragments when clarity survives.",
+    bestFor: "Routine implementation when you already know the domain.",
+    tradeoff: "Less conversational and harder to skim for newcomers.",
+    badge: "aggressive",
+  },
+  "caveman-ultra": {
+    summary: "Maximizes compression with terse bullets, abbreviations, and fragments.",
+    bestFor: "High-volume iteration with an experienced user.",
+    tradeoff: "Lowest readability; ask explicitly whenever detail matters.",
+    badge: "most aggressive",
+  },
+};
+
+export const CODING_GUIDANCE: Record<CodingMode, OptionGuidance> = {
+  off: {
+    summary: "Does not add token-aware implementation guidance.",
+    bestFor: "Tasks where architecture or implementation breadth should remain unconstrained.",
+    tradeoff: "The agent may create more code, files, or abstractions.",
+  },
+  "ponytail-lite": {
+    summary: "Completes the request normally and briefly notes a materially simpler alternative.",
+    bestFor: "A conservative default for everyday coding.",
+    tradeoff: "Suggestions may add a small amount of commentary.",
+    badge: "suggested default",
+  },
+  "ponytail-full": {
+    summary: "Enforces the smallest maintainable diff and avoids unnecessary ownership.",
+    bestFor: "Focused fixes, features, and maintenance work.",
+    tradeoff: "May deliberately skip optional scaffolding or extensibility.",
+  },
+  "ponytail-ultra": {
+    summary: "Applies YAGNI aggressively and challenges speculative requirements.",
+    bestFor: "Prototype cleanup and strongly constrained changes.",
+    tradeoff: "May push back on requested flexibility that appears premature.",
+    badge: "most aggressive",
+  },
+};
+
+export const RTK_GUIDANCE: Record<"off" | "rtk", OptionGuidance> = {
+  off: {
+    summary: "Runs shell commands normally and places their standard output in model context.",
+    bestFor: "Sessions with little shell usage or commands unsupported by RTK.",
+    tradeoff: "Verbose command output can consume substantial context.",
+  },
+  rtk: {
+    summary: "Lets RTK rewrite supported shell commands to produce compact tool output.",
+    bestFor: "Shell-heavy coding, testing, Git, and repository exploration.",
+    tradeoff: "Only future supported commands benefit; rewrites fail open.",
+    badge: "shell-heavy sessions",
+  },
+};
+
+export function optionGuidance(
+  key: keyof OptimizerState,
+  value: string | boolean,
+): OptionGuidance {
+  if (key === "output") return OUTPUT_GUIDANCE[value as OutputMode];
+  if (key === "coding") return CODING_GUIDANCE[value as CodingMode];
+  return RTK_GUIDANCE[value ? "rtk" : "off"];
+}
+
 const CAVEMAN_BASE = `CAVEMAN OUTPUT MODE. Compress explanations, not substance.
 - Remove pleasantries, filler, repetition, and unnecessary headings.
 - Prefer short sentences or fragments. Keep technical terms exact.

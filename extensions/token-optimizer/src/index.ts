@@ -11,7 +11,10 @@ import {
   type OptimizerState,
   outputPrompt,
 } from "./modes.ts";
-import { openOptimizerPopup } from "./popup.ts";
+import {
+  type OptimizerInsights,
+  openOptimizerPopup,
+} from "./popup.ts";
 import { commandPath, rewriteRtkCommand } from "./rtk.ts";
 
 const ENTRY_TYPE = "token-optimizer-state";
@@ -110,6 +113,24 @@ function activeLabels(state: OptimizerState): string[] {
   ].filter((value): value is string => Boolean(value));
 }
 
+export function buildOptimizerInsights(
+  ctx: Pick<ExtensionCommandContext, "getContextUsage" | "sessionManager">,
+  rtkAvailable: boolean,
+): OptimizerInsights {
+  const contextPercent = ctx.getContextUsage()?.percent ?? undefined;
+  let bashCalls = 0;
+  for (const entry of ctx.sessionManager.getBranch()) {
+    if (
+      entry.type === "message" &&
+      entry.message.role === "toolResult" &&
+      entry.message.toolName === "bash"
+    ) {
+      bashCalls += 1;
+    }
+  }
+  return { contextPercent, bashCalls, rtkAvailable };
+}
+
 export default function tokenOptimizer(pi: ExtensionAPI): void {
   let state: OptimizerState = { ...DEFAULT_STATE };
 
@@ -184,6 +205,7 @@ export default function tokenOptimizer(pi: ExtensionAPI): void {
             pi.appendEntry(ENTRY_TYPE, state);
             updateStatus(ctx);
           },
+          buildOptimizerInsights(ctx, rtkAvailable),
         );
         if (outcome !== "install-rtk") return;
         rtkAvailable = await offerRtkInstall(pi, ctx);

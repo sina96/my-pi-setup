@@ -13,9 +13,15 @@ needs.
 | Tool output | `off`, `rtk` | Shell output placed into model context |
 
 Use `j/k` or arrow keys to move and `h/l`, left/right, Space, or Enter to change
-a value. Active modes appear in one status item. Changes are stored in Pi's
-session log, so they survive navigation within that session but are not carried
-into a new session.
+a value. The popup explains the selected option's behavior, best use, and
+trade-off. It also reports current context usage and Bash activity, then gives a
+deterministic recommendation such as suggesting RTK for a shell-heavy session.
+Press `?` for a compact comparison of every mode.
+
+Active modes appear in one status item. Changes are stored in Pi's session log,
+so they survive navigation within that session but are not carried into a new
+session. Recommendations are based only on local session metrics and do not call
+another model or claim estimated savings.
 
 The RTK row is shown only when the `rtk` executable is on `PATH`. When it is
 missing, the popup instead shows `i install RTK`. Choosing it lists the available

@@ -70,7 +70,7 @@ Use `simply-goal` first when:
 - The implementing agent can verify completion directly.
 
 Use third-party
-[`pi-goal-list-loop-audit`](../pi-goal-list-loop-audit/README.md) when you need
+[`pi-goal-list-loop-audit`](../../docs/third-party-extensions/pi-goal-list-loop-audit.md) when you need
 queues, metrics, durable project-wide loops, decision/consent gates, stall
 recovery, or an isolated independent completion auditor.
 

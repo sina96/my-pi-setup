@@ -9,7 +9,7 @@
 
 ## Before installing
 
-Try the smaller local [`simply-goal`](../goal/README.md) first for one clearly
+Try the smaller local [`simply-goal`](../../extensions/goal/README.md) first for one clearly
 scoped objective and bounded batches of autonomous turns. Install GLLA when you
 specifically need its queues, process loops, durable orchestration, or independent
 isolated auditor.

@@ -14,24 +14,21 @@ A modular, shareable [Pi](https://pi.dev) coding environment. Each customization
 ## Directories
 
 - `assets/` — screenshots and supporting files
-- `extensions/` — Pi extensions and extension referrals
+- `docs/` — optional third-party recommendations and supporting guides
+- `extensions/` — Pi extensions maintained in this repository
 - `skills/` — reusable agent skills
 - `themes/` — custom Pi TUI themes
 
 ## Custom Extensions
 
-**Herdr only** means the extension intentionally registers no user-facing functionality, or becomes a no-op, when Pi is not running in a Herdr-managed pane. Extensions with only optional Herdr actions remain available elsewhere and are described accordingly.
-
 - [`ask-user`](extensions/ask-user/README.md) — Adds the `ask_user` tool for one focused question with choices, freeform answers, timeouts, and optional Herdr blocked-state integration.
 - [`compact-diff`](extensions/compact-diff/README.md) — Adds a compact `/diff` popup with Vim and arrow navigation, analysis drafts, and capability-aware file actions; pane actions appear only in Herdr.
 - [`file-manager`](extensions/file-manager/README.md) — Adds a Neovim-style `/files` browser with filename and content search plus capability-aware copy, reveal, editor, and optional Herdr pane actions.
 - [`goal`](extensions/goal/README.md) — Runs a persistent, verification-aware objective loop with automatic continuation and bounded turn batches.
-- **Herdr only** — [`herdr-blocked-state`](extensions/herdr-blocked-state/README.md) reports `ask_user` and permission-dialog waits as blocked state to Herdr.
-- **Herdr only** — [`herdr-subagents`](extensions/herdr-subagents/README.md) adds default-off, asynchronous Pi subagents in dedicated Herdr tabs with automatic result delivery.
 - [`permission-gate`](extensions/permission-gate/README.md) — Applies severity-aware approval to risky shell commands and sensitive file/search paths, with scoped policies, exact-command approvals, optional Herdr blocked state, and session YOLO mode.
 - [`package-manager-policy`](extensions/package-manager-policy/README.md) — Defaults new projects to pnpm and uv, respects established project managers, and provides session-adjustable warning or enforcement via `/package-manager`.
 - [`pi-clip`](extensions/pi-clip/README.md) — Adds `/clip` for selecting and copying code blocks, tables, lists, ranges, prompts, or responses.
-- **Herdr only** — [`pi-herdr-btw`](extensions/pi-herdr-btw/README.md) opens a context-aware, tool-enabled `/btw` side thread in a focused Herdr pane with optional merge-back.
+
 - [`pi-startup`](extensions/pi-startup/README.md) — Replaces the standard startup header with a responsive dashboard showing the Pi logo, resource counts, shortcuts, and version.
 - [`plan-mode`](extensions/plan-mode/README.md) — Provides a PLAN → EXECUTE workflow with read-only planning tools and controlled transition into implementation.
 - [`review`](extensions/review/README.md) — Adds a temporary read-only `/review` workflow for working trees, branches, commits, paths, and GitHub pull requests.
@@ -43,14 +40,19 @@ A modular, shareable [Pi](https://pi.dev) coding environment. Each customization
 - [`token-optimizer`](extensions/token-optimizer/README.md) — Adds default-off, session-scoped output, coding, and RTK token controls via `/tokens`, plus a one-shot `/brief` prompt.
 - [`whimsical`](extensions/whimsical/README.md) — Replaces the working message with hundreds of playful first-turn and follow-up phrases, toggled with `/whimsy`.
 
-### Third-party extension referrals
+### Herder Only
+**Herdr only** means the extension intentionally registers no user-facing functionality, or becomes a no-op, when Pi is not running in a Herdr-managed pane. Extensions with only optional Herdr actions remain available elsewhere and are described accordingly.
+ - **Herdr only** — [`herdr-blocked-state`](extensions/herdr-blocked-state/README.md) reports `ask_user` and permission-dialog waits as blocked state to Herdr.
+- **Herdr only** — [`herdr-subagents`](extensions/herdr-subagents/README.md) adds default-off, asynchronous Pi subagents in dedicated Herdr tabs with automatic result delivery.
+- **Herdr only** — [`pi-herdr-btw`](extensions/pi-herdr-btw/README.md) opens a context-aware, tool-enabled `/btw` side thread in a focused Herdr pane with optional merge-back.
 
-These directories document upstream packages without vendoring or loading them:
+### Recommended third-party extensions
 
-- [`pi-fff`](extensions/pi-fff/README.md) — Indexed fuzzy file and content search from `npm:@ff-labs/pi-fff`.
-- [`pi-goal-list-loop-audit`](extensions/pi-goal-list-loop-audit/README.md) — Advanced task queues, process loops, and isolated completion audits.
+Optional upstream packages— not loaded by this setup but can be used:
 
-ask your agent to install them when you need them.
+- [`pi-fff`](docs/third-party-extensions/pi-fff.md) — Indexed fuzzy file and content search.
+- [`pi-goal-list-loop-audit`](docs/third-party-extensions/pi-goal-list-loop-audit.md) — Advanced goal queues, loops, and isolated completion audits.
+- [`rpiv-web-tools`](docs/third-party-extensions/rpiv-web-tools.md) — On-demand `web_search` and `web_fetch` with pluggable providers.
 
 #### Notes
 
@@ -59,6 +61,8 @@ ask your agent to install them when you need them.
 
 ## Skills
 
+- [`github`](skills/github/SKILL.md) — Uses `gh` for read-oriented GitHub issues, pull requests, Actions, and API queries, with confirmation safeguards for mutations.
+- [`native-web-search`](skills/native-web-search/SKILL.md) — Runs concise, source-linked web research through a fast OpenAI Codex or Anthropic model using provider-native search.
 - [`summarize`](skills/summarize/SKILL.md) — Converts URLs, PDFs, Office documents, HTML, and text into Markdown, with optional isolated summarization using a configurable lightweight model.
 
 ## Themes
