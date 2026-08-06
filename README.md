@@ -10,6 +10,7 @@ A modular, shareable [Pi](https://pi.dev) coding environment. Each customization
 - [Starship](https://starship.rs)
 - [Neovim](https://neovim.io)
 - [Zed](https://zed.dev)
+- Also recommend to add these stuff globally as well see **docs/almost-required-stuff**
 
 ## Directories
 
@@ -41,22 +42,18 @@ A modular, shareable [Pi](https://pi.dev) coding environment. Each customization
 - [`whimsical`](extensions/whimsical/README.md) — Replaces the working message with hundreds of playful first-turn and follow-up phrases, toggled with `/whimsy`.
 
 ### Herder Only
-**Herdr only** means the extension intentionally registers no user-facing functionality, or becomes a no-op, when Pi is not running in a Herdr-managed pane. Extensions with only optional Herdr actions remain available elsewhere and are described accordingly.
+**Herdr only** means the extension intentionally registers no user-facing functionality, or becomes a no-op, when Pi is not running in a Herdr-managed pane. Extensions with only optional Herdr actions remain available elsewhere and are described accordingly. Works properly with Herdr being set up.
  - **Herdr only** — [`herdr-blocked-state`](extensions/herdr-blocked-state/README.md) reports `ask_user` and permission-dialog waits as blocked state to Herdr.
 - **Herdr only** — [`herdr-subagents`](extensions/herdr-subagents/README.md) adds default-off, asynchronous Pi subagents in dedicated Herdr tabs with automatic result delivery.
 - **Herdr only** — [`pi-herdr-btw`](extensions/pi-herdr-btw/README.md) opens a context-aware, tool-enabled `/btw` side thread in a focused Herdr pane with optional merge-back.
 
-### Recommended third-party extensions
+### Extra community-based extensions
 
-Optional upstream packages— not loaded by this setup but can be used:
+Optional upstream packages— not loaded by this setup but can be used in need:
 
 - [`pi-fff`](docs/third-party-extensions/pi-fff.md) — Indexed fuzzy file and content search.
 - [`pi-goal-list-loop-audit`](docs/third-party-extensions/pi-goal-list-loop-audit.md) — Advanced goal queues, loops, and isolated completion audits.
 - [`rpiv-web-tools`](docs/third-party-extensions/rpiv-web-tools.md) — On-demand `web_search` and `web_fetch` with pluggable providers.
-
-#### Notes
-
-**Herdr only:** `extensions/herdr-agent-state.ts` is generated and managed by Herdr and is loaded explicitly by the root package so `ask_user` and permission prompts can report blocked state. It is not a portable custom extension; put custom extensions beside it rather than editing it.
 
 
 ## Skills

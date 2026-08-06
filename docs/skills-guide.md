@@ -1,14 +1,17 @@
-# Skills
+# Skills Guide
 
 Custom Pi agent skills for specialized tasks.
 
-## Available Skills
+## Available Skills (bundled)
 
-- **[`find-skills`](find-skills/SKILL.md)** — Discover and install agent skills when asking "how do I do X" or "is there a skill for..."
-- **[`github`](github/SKILL.md)** — Interact with GitHub using `gh` CLI for issues, PRs, Actions, and API queries
-- **[`herdr`](herdr/SKILL.md)** — Control herdr from inside it: manage workspaces, tabs, panes, spawn agents, read output
-- **[`native-web-search`](native-web-search/SKILL.md)** — Fast, source-linked internet research through OpenAI Codex or Anthropic native web search
-- **[`summarize`](summarize/SKILL.md)** — Convert URLs and documents (PDF, DOCX, PPTX, etc.) to Markdown with optional summarization
+- **[`github`](../skills/github/SKILL.md)** — Interact with GitHub using `gh` CLI for issues, PRs, Actions, and API queries
+- **[`native-web-search`](../skills/native-web-search/SKILL.md)** — Fast, source-linked internet research through OpenAI Codex or Anthropic native web search
+- **[`summarize`](../skills/summarize/SKILL.md)** — Convert URLs and documents (PDF, DOCX, PPTX, etc.) to Markdown with optional summarization
+
+## Recommended Skills (install globally)
+
+- **[`find-skills`](almost-required-stuff/find-skills.md)** — Discover and install agent skills from the open ecosystem via `npx skills`
+- **[`herdr`](almost-required-stuff/herdr-skill.md)** — Control herdr from inside it: manage workspaces, tabs, panes, spawn agents, read output. Installed via Herder integration.
 
 ## Managing Skill Conflicts
 
@@ -128,9 +131,8 @@ rm -rf ~/.pi/agent/skills/github
 
 1. Create a directory: `skills/my-skill/`
 2. Add `SKILL.md` with description and instructions
-3. Update this README
-4. Test with and without `.piignore`
-5. Verify no conflicts with globally installed packages
+3. Test with and without `.piignore`
+4. Verify no conflicts with globally installed packages
 
 ## References
 

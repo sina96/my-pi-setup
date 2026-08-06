@@ -17,7 +17,6 @@
   },
   "pi": {
     "extensions": [
-      "./extensions/herdr-agent-state.ts",
       "./extensions/*/src/index.ts"
     ],
     "themes": [
