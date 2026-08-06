@@ -82,6 +82,10 @@ A summary contains:
 
 Summary mode always saves the complete converted Markdown to a temporary `.md` file and prints a final `[Hint: ...]` line containing its path. Inspect that file before quoting details not present in the summary.
 
+## Environment
+
+Pi automatically sets `AI_AGENT=pi` in child-process environments. Both `markitdown` and the nested Pi summarizer inherit this variable for agent attribution. Do not override or remove it.
+
 ## Choosing when not to use this skill
 
 Prefer Pi's normal `read` tool for source code, Markdown, JSON, and ordinary text files. Prefer direct source retrieval for a small GitHub file. Use this skill when conversion, document structure, or long-document summarization adds value.

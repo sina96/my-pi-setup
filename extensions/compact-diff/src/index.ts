@@ -20,6 +20,28 @@ ${text}
 }
 
 export default function compactDiff(pi: ExtensionAPI): void {
+  // Pi 0.84.0+: register a display-only markdown transformer that enhances
+  // diff blocks in assistant messages with summary line counts.
+  const register = (pi as ExtensionAPI & {
+    registerMarkdownTransformer?: (fn: (markdown: string, context: { role: string }) => string) => void;
+  }).registerMarkdownTransformer;
+  if (typeof register === "function") {
+    register.call(pi, (markdown: string, context: { role: string }) => {
+      if (context.role !== "assistant") return markdown;
+      return markdown.replace(
+        /```diff\n([\s\S]*?)```/g,
+        (_match, content: string) => {
+          const lines = content.split("\n");
+          const added = lines.filter((l: string) => l.startsWith("+") && !l.startsWith("+++")).length;
+          const removed = lines.filter((l: string) => l.startsWith("-") && !l.startsWith("---")).length;
+          const summary = [added && `+${added}`, removed && `-${removed}`].filter(Boolean).join(" ");
+          const header = summary ? ` (${summary})` : "";
+          return `\`\`\`diff${header}\n${content}\`\`\``;
+        },
+      );
+    });
+  }
+
   pi.registerCommand("diff", {
     description: "Open a compact Git diff popup (/diff [git diff args])",
     handler: async (args, ctx) => {

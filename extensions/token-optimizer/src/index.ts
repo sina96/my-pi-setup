@@ -134,6 +134,23 @@ export function buildOptimizerInsights(
 export default function tokenOptimizer(pi: ExtensionAPI): void {
   let state: OptimizerState = { ...DEFAULT_STATE };
 
+  // Pi 0.84.0+: register a display-only markdown transformer that annotates
+  // assistant output when token optimization is active.
+  const register = (pi as ExtensionAPI & {
+    registerMarkdownTransformer?: (fn: (markdown: string, context: { role: string }) => string) => void;
+  }).registerMarkdownTransformer;
+  if (typeof register === "function") {
+    register.call(pi, (markdown: string, context: { role: string }) => {
+      if (context.role !== "assistant") return markdown;
+      const labels = activeLabels(state);
+      if (labels.length === 0) return markdown;
+      // Annotate caveman/ponytail-compressed output so the user knows
+      // optimization is active. The comment is display-only and does not
+      // enter LLM context.
+      return `<!-- tokens: ${labels.join(", ")} -->\n${markdown}`;
+    });
+  }
+
   const updateStatus = (ctx: Pick<ExtensionContext, "ui">) => {
     const labels = activeLabels(state);
     ctx.ui.setStatus(

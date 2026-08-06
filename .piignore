@@ -1,0 +1,26 @@
+# .piignore
+#
+# Prevent Pi from loading specific resources when working in this directory.
+# Useful for avoiding conflicts between local development and globally installed packages.
+#
+# Examples:
+#
+# Ignore all skills:
+# skills/
+#
+# Ignore specific skill:
+# skills/github/
+#
+# Ignore all extensions:
+# extensions/
+#
+# Ignore specific extension:
+# extensions/task-list/
+#
+# Ignore all themes:
+# themes/
+#
+# Patterns support:
+# skills/*/           # All skill directories
+# extensions/*.ts     # All TypeScript extension files
+# **/*.test.ts        # All test files recursively

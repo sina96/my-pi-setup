@@ -43,6 +43,8 @@ Optional flags:
 - `--provider openai-codex|anthropic`
 - `--model <model-id>`
 - `--timeout <ms>`
+- `--temperature <0.0-2.0>` — override model temperature (Anthropic defaults to 0)
+- `--top-p <0.0-1.0>` — override nucleus sampling probability
 - `--json`
 
 ## Output contract
@@ -55,6 +57,10 @@ The research model is instructed to provide:
 4. Disagreements between sources and a recommendation about which sources to trust first.
 
 Treat the result as a research lead, not proof. Verify consequential claims against primary sources before relying on them.
+
+## Environment
+
+Pi automatically sets `AI_AGENT=pi` in child-process environments. The search script inherits this variable for agent attribution when making provider API calls. Do not override or remove it.
 
 ## Privacy, credentials, and cost
 

@@ -15,6 +15,8 @@ function parseArgs(argv) {
 		model: undefined,
 		purpose: "general research support",
 		timeoutMs: 120000,
+		temperature: undefined,
+		topP: undefined,
 		json: false,
 		help: false,
 		query: "",
@@ -63,6 +65,22 @@ function parseArgs(argv) {
 			out.timeoutMs = Math.max(1000, Number(arg.slice("--timeout=".length) || out.timeoutMs));
 			continue;
 		}
+		if (arg === "--temperature") {
+			out.temperature = Number(argv[++i]);
+			continue;
+		}
+		if (arg.startsWith("--temperature=")) {
+			out.temperature = Number(arg.slice("--temperature=".length));
+			continue;
+		}
+		if (arg === "--top-p") {
+			out.topP = Number(argv[++i]);
+			continue;
+		}
+		if (arg.startsWith("--top-p=")) {
+			out.topP = Number(arg.slice("--top-p=".length));
+			continue;
+		}
 		positional.push(arg);
 	}
 
@@ -77,7 +95,8 @@ function usage() {
 Examples:
   node search.mjs "latest python release" --purpose "update dependency notes"
   node search.mjs "HTTP/3 browser support 2026" --provider openai-codex
-  node search.mjs "vite 7 breaking changes" --json`;
+  node search.mjs "vite 7 breaking changes" --json
+  node search.mjs "Go 1.24 features" --temperature 0.3 --top-p 0.9`;
 }
 
 function readJson(path, fallback = {}) {
@@ -414,7 +433,7 @@ function extractEventData(chunk) {
 	return payload;
 }
 
-async function runCodexSearch({ model, apiKey, accountId, query, purpose, timeoutMs, baseUrl }) {
+async function runCodexSearch({ model, apiKey, accountId, query, purpose, timeoutMs, baseUrl, temperature, topP }) {
 	const tokenAccountId = accountId || decodeJwtAccountId(apiKey);
 	if (!tokenAccountId) {
 		throw new Error("Could not determine ChatGPT account ID for openai-codex token.");
@@ -428,6 +447,8 @@ async function runCodexSearch({ model, apiKey, accountId, query, purpose, timeou
 		input: [{ role: "user", content: buildUserPrompt(query, purpose) }],
 		tools: [{ type: "web_search" }],
 		tool_choice: "auto",
+		...(Number.isFinite(temperature) ? { temperature } : {}),
+		...(Number.isFinite(topP) ? { top_p: topP } : {}),
 	};
 
 	const endpoint = resolveCodexUrl(baseUrl);
@@ -534,11 +555,12 @@ function buildAnthropicHeaders(apiKey) {
 	};
 }
 
-async function runAnthropicSearch({ model, apiKey, query, purpose, timeoutMs }) {
+async function runAnthropicSearch({ model, apiKey, query, purpose, timeoutMs, temperature, topP }) {
 	const body = {
 		model,
 		max_tokens: 1800,
-		temperature: 0,
+		temperature: Number.isFinite(temperature) ? temperature : 0,
+		...(Number.isFinite(topP) ? { top_p: topP } : {}),
 		system: buildSystemPrompt(),
 		tools: [{ type: "web_search_20250305", name: "web_search", max_uses: 5 }],
 		messages: [{ role: "user", content: buildUserPrompt(query, purpose) }],
@@ -606,6 +628,8 @@ async function main() {
 					purpose: args.purpose,
 					timeoutMs: args.timeoutMs,
 					baseUrl: model.baseUrl,
+					temperature: args.temperature,
+					topP: args.topP,
 			  })
 			: await runAnthropicSearch({
 					model: model.id,
@@ -613,6 +637,8 @@ async function main() {
 					query: args.query,
 					purpose: args.purpose,
 					timeoutMs: args.timeoutMs,
+					temperature: args.temperature,
+					topP: args.topP,
 			  });
 
 	if (args.json) {
