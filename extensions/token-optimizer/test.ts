@@ -11,7 +11,7 @@ import {
   outputPrompt,
 } from "./src/modes.ts";
 import { openOptimizerPopup, optimizerRows } from "./src/popup.ts";
-import { rewriteRtkChain, splitChain } from "./src/rtk.ts";
+import { rewriteRtkCommand } from "./src/rtk.ts";
 
 test("builds brief and safety-aware optimization prompts", () => {
   assert.equal(outputPrompt("off"), "");
@@ -30,22 +30,52 @@ test("validates persisted session state", () => {
   );
 });
 
-test("rewrites supported RTK command chains and preserves quoted operators", () => {
-  assert.equal(
-    rewriteRtkChain('git status && npm test | grep "a|b"'),
-    'rtk git status && rtk npm test | rtk grep "a|b"',
+test("delegates rewrite decisions to the RTK binary", async () => {
+  const calls: unknown[][] = [];
+  const rewritten = await rewriteRtkCommand(
+    {
+      exec: async (...args: unknown[]) => {
+        calls.push(args);
+        return {
+          code: 3,
+          stdout: "rtk git status\n",
+          stderr: "",
+          killed: false,
+        };
+      },
+    } as never,
+    "/usr/local/bin/rtk",
+    "git status",
   );
-  assert.equal(
-    rewriteRtkChain("echo ok && git diff"),
-    "echo ok && rtk git diff",
-  );
-  assert.equal(rewriteRtkChain("rtk git status"), "rtk git status");
+
+  assert.equal(rewritten, "rtk git status");
+  assert.deepEqual(calls[0]?.slice(0, 2), [
+    "/usr/local/bin/rtk",
+    ["rewrite", "git status"],
+  ]);
 });
 
-test("leaves shell syntax it cannot safely parse untouched", () => {
-  assert.equal(splitChain("git status & npm test"), undefined);
-  assert.equal(rewriteRtkChain("git $(echo status)"), "git $(echo status)");
-  assert.equal(rewriteRtkChain("git 'unterminated"), "git 'unterminated");
+test("RTK rewriting fails open for unsupported commands and errors", async () => {
+  const unchanged = await rewriteRtkCommand(
+    {
+      exec: async () => ({
+        code: 1,
+        stdout: "",
+        stderr: "",
+        killed: false,
+      }),
+    } as never,
+    "rtk",
+    "echo ok",
+  );
+  const failed = await rewriteRtkCommand(
+    { exec: async () => { throw new Error("broken"); } } as never,
+    "rtk",
+    "git status",
+  );
+
+  assert.equal(unchanged, undefined);
+  assert.equal(failed, undefined);
 });
 
 test("hides the RTK row when the binary is unavailable", () => {
@@ -151,6 +181,7 @@ test("offers an explicit confirmation before installing RTK", async () => {
       } as never,
       {
         ui: {
+          select: async (_title: string, options: string[]) => options[0],
           confirm: async () => true,
           notify() {},
         },
@@ -158,7 +189,68 @@ test("offers an explicit confirmation before installing RTK", async () => {
     );
     assert.equal(installed, true);
     assert.equal(calls.length, 1);
-    assert.deepEqual(calls[0]?.slice(0, 2), [cargo, ["install", "rtk-ai"]]);
+    assert.deepEqual(calls[0]?.slice(0, 2), [
+      cargo,
+      [
+        "install",
+        "--git",
+        "https://github.com/rtk-ai/rtk",
+        "--branch",
+        "master",
+        "rtk",
+      ],
+    ]);
+  } finally {
+    if (oldPath == null) delete process.env.PATH;
+    else process.env.PATH = oldPath;
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test("offers Homebrew and Cargo and installs with the selected manager", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "token-optimizer-brew-install-"));
+  const brew = join(directory, "brew");
+  const cargo = join(directory, "cargo");
+  const rtk = join(directory, "rtk");
+  writeFileSync(brew, "#!/bin/sh\nexit 0\n");
+  writeFileSync(cargo, "#!/bin/sh\nexit 0\n");
+  chmodSync(brew, 0o755);
+  chmodSync(cargo, 0o755);
+  const oldPath = process.env.PATH;
+  process.env.PATH = directory;
+  const calls: unknown[][] = [];
+  let choices: string[] = [];
+
+  try {
+    const installed = await offerRtkInstall(
+      {
+        exec: async (...args: unknown[]) => {
+          calls.push(args);
+          writeFileSync(rtk, "#!/bin/sh\nexit 0\n");
+          chmodSync(rtk, 0o755);
+          return { code: 0, stdout: "", stderr: "", killed: false };
+        },
+      } as never,
+      {
+        ui: {
+          select: async (_title: string, options: string[]) => {
+            choices = options;
+            return options.find((option) => option.startsWith("Homebrew"));
+          },
+          confirm: async () => true,
+          notify() {},
+        },
+      } as never,
+    );
+    assert.equal(installed, true);
+    assert.deepEqual(choices, [
+      "Homebrew (recommended) — brew install rtk-ai/tap/rtk",
+      "Cargo — install from the official rtk-ai/rtk repository",
+    ]);
+    assert.deepEqual(calls[0]?.slice(0, 2), [
+      brew,
+      ["install", "rtk-ai/tap/rtk"],
+    ]);
   } finally {
     if (oldPath == null) delete process.env.PATH;
     else process.env.PATH = oldPath;
@@ -185,6 +277,7 @@ test("does not install RTK when confirmation is declined", async () => {
       } as never,
       {
         ui: {
+          select: async (_title: string, options: string[]) => options[0],
           confirm: async () => false,
           notify() {},
         },
@@ -219,6 +312,12 @@ test("extension starts off, restores session state, and rewrites only with RTK",
         commands.set(name, command);
       },
       appendEntry() {},
+      exec: async (_command: string, args: string[]) => ({
+        code: 0,
+        stdout: args[0] === "rewrite" ? `rtk ${args[1]}\n` : "",
+        stderr: "",
+        killed: false,
+      }),
     } as never);
 
     let entries: unknown[] = [];
@@ -255,7 +354,7 @@ test("extension starts off, restores session state, and rewrites only with RTK",
     });
     assert.match(injected.systemPrompt, /base\n\nBe brief\./);
     assert.match(injected.systemPrompt, /PONYTAIL CODING MODE/);
-    assert.match(injected.systemPrompt, /RTK MODE/);
+    assert.doesNotMatch(injected.systemPrompt, /RTK MODE/);
 
     const call = { toolName: "bash", input: { command: "git status" } };
     await handlers.get("tool_call")?.[0]?.(call, ctx);

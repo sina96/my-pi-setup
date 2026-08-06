@@ -18,17 +18,29 @@ session log, so they survive navigation within that session but are not carried
 into a new session.
 
 The RTK row is shown only when the `rtk` executable is on `PATH`. When it is
-missing, the popup instead shows `i install RTK`. Choosing it asks for explicit
-confirmation before running `cargo install rtk-ai`; if Cargo is unavailable,
-the extension gives Rust installation instructions and changes nothing. When
-RTK is enabled, the extension adds RTK guidance and conservatively prefixes
-recognized segments of `bash` command chains. It rechecks the executable before
-every rewrite and leaves unsupported or ambiguous shell syntax untouched.
+missing, the popup instead shows `i install RTK`. Choosing it lists the available
+Homebrew and Cargo installers, marks Homebrew as recommended when available,
+and requests explicit confirmation before running the selected command. If
+neither package manager is available, the extension gives setup instructions and
+changes nothing.
 
-RTK can also be installed manually:
+When RTK is enabled, the extension follows [RTK's official Pi integration
+design](https://www.rtk-ai.app/docs/getting-started/supported-agents/#pi): it
+intercepts Pi's `tool_call` event and delegates each decision to `rtk rewrite`,
+keeping RTK's own command registry as the source of truth. Rewrites
+fail open, use a two-second timeout, and can be bypassed for a process with
+`RTK_DISABLED=1`. Because this extension already provides the Pi hook, do not
+also run `rtk init --agent pi`; that would install a redundant RTK extension.
+`rtk rewrite` requires RTK 0.23.0 or newer.
+
+RTK can also be installed manually with either package manager:
 
 ```bash
-cargo install rtk-ai
+# Recommended when Homebrew is available
+brew install rtk-ai/tap/rtk
+
+# Or install the correct crate directly from RTK's repository
+cargo install --git https://github.com/rtk-ai/rtk --branch master rtk
 ```
 
 ## One-shot brevity

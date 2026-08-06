@@ -23,6 +23,9 @@
     "themes": [
       "./themes/*.json"
     ],
+    "skills": [
+      "./skills"
+    ],
     "prompts": [
       "./extensions/token-optimizer/prompts/*.md"
     ]

@@ -1,7 +1,8 @@
-import type {
-  ExtensionAPI,
-  ExtensionCommandContext,
-  ExtensionContext,
+import {
+  isToolCallEventType,
+  type ExtensionAPI,
+  type ExtensionCommandContext,
+  type ExtensionContext,
 } from "@earendil-works/pi-coding-agent";
 import {
   codingPrompt,
@@ -11,7 +12,7 @@ import {
   outputPrompt,
 } from "./modes.ts";
 import { openOptimizerPopup } from "./popup.ts";
-import { commandPath, rewriteRtkChain, RTK_PROMPT } from "./rtk.ts";
+import { commandPath, rewriteRtkCommand } from "./rtk.ts";
 
 const ENTRY_TYPE = "token-optimizer-state";
 const STATUS_KEY = "token-optimizer";
@@ -20,24 +21,61 @@ export async function offerRtkInstall(
   pi: Pick<ExtensionAPI, "exec">,
   ctx: Pick<ExtensionCommandContext, "ui">,
 ): Promise<boolean> {
+  const brew = commandPath("brew");
   const cargo = commandPath("cargo");
-  if (!cargo) {
+  const installers = [
+    brew
+      ? {
+          label: "Homebrew (recommended) — brew install rtk-ai/tap/rtk",
+          name: "Homebrew",
+          command: brew,
+          args: ["install", "rtk-ai/tap/rtk"],
+          detail: "This downloads and installs RTK's official Homebrew formula.",
+        }
+      : undefined,
+    cargo
+      ? {
+          label: "Cargo — install from the official rtk-ai/rtk repository",
+          name: "Cargo",
+          command: cargo,
+          args: [
+            "install",
+            "--git",
+            "https://github.com/rtk-ai/rtk",
+            "--branch",
+            "master",
+            "rtk",
+          ],
+          detail: "This downloads and compiles RTK from its official Git repository.",
+        }
+      : undefined,
+  ].filter((installer): installer is NonNullable<typeof installer> => Boolean(installer));
+
+  if (installers.length === 0) {
     ctx.ui.notify(
-      "RTK requires Cargo. Install Rust from https://rustup.rs, then reopen /tokens.",
+      "RTK requires Homebrew or Cargo. Install one, then reopen /tokens.",
       "warning",
     );
     return false;
   }
 
+  const selectedLabel = await ctx.ui.select(
+    "Install RTK with:",
+    installers.map((installer) => installer.label),
+  );
+  const installer = installers.find((candidate) => candidate.label === selectedLabel);
+  if (!installer) return false;
+
+  const displayCommand = `${installer.name === "Homebrew" ? "brew" : "cargo"} ${installer.args.join(" ")}`;
   const confirmed = await ctx.ui.confirm(
     "Install RTK?",
-    "Run `cargo install rtk-ai`? This downloads and compiles third-party software from crates.io.",
+    `Run \`${displayCommand}\`? ${installer.detail}`,
   );
   if (!confirmed) return false;
 
-  ctx.ui.notify("Installing RTK with Cargo…", "info");
+  ctx.ui.notify(`Installing RTK with ${installer.name}…`, "info");
   try {
-    const result = await pi.exec(cargo, ["install", "rtk-ai"], {
+    const result = await pi.exec(installer.command, installer.args, {
       timeout: 600_000,
     });
     if (result.code !== 0) {
@@ -51,7 +89,7 @@ export async function offerRtkInstall(
     ctx.ui.notify(
       available
         ? "RTK installed. Its control is now available."
-        : "RTK installed, but it is not on PATH. Add ~/.cargo/bin and restart Pi.",
+        : "RTK installed, but it is not on PATH. Add its install directory to PATH and restart Pi.",
       available ? "info" : "warning",
     );
     return available;
@@ -104,7 +142,6 @@ export default function tokenOptimizer(pi: ExtensionAPI): void {
     const fragments = [
       outputPrompt(state.output),
       codingPrompt(state.coding),
-      state.rtk ? RTK_PROMPT : "",
     ].filter(Boolean);
     if (fragments.length === 0) return;
     return {
@@ -112,11 +149,20 @@ export default function tokenOptimizer(pi: ExtensionAPI): void {
     };
   });
 
-  pi.on("tool_call", (event) => {
-    if (!state.rtk || event.toolName !== "bash" || !commandPath("rtk")) return;
-    const input = event.input as { command?: unknown };
-    if (typeof input.command !== "string") return;
-    input.command = rewriteRtkChain(input.command);
+  pi.on("tool_call", async (event, ctx) => {
+    if (!state.rtk || !isToolCallEventType("bash", event)) return;
+    const rtk = commandPath("rtk");
+    const command = event.input.command;
+    if (
+      !rtk ||
+      typeof command !== "string" ||
+      command.trim() === "" ||
+      command.startsWith("rtk ") ||
+      process.env.RTK_DISABLED === "1"
+    ) return;
+
+    const rewritten = await rewriteRtkCommand(pi, rtk, command, ctx.signal);
+    if (rewritten && rewritten !== command) event.input.command = rewritten;
   });
 
   pi.registerCommand("tokens", {
