@@ -1,6 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import taskListExtension, { restoreTaskState, type TaskStatus, widgetLines } from "./src/index.ts";
+import taskListExtension, {
+  COMPLETED_HIDE_DELAY_MS,
+  restoreTaskState,
+  type TaskStatus,
+  widgetLines,
+} from "./src/index.ts";
 
 function harness(branch: unknown[] = []) {
   const handlers = new Map<string, Function[]>();
@@ -92,4 +97,30 @@ test("/tasks clear persists the empty state and removes the widget", async () =>
   assert.equal(h.entries[0]?.[0], "simply-task-list-state");
   assert.deepEqual((h.entries[0]?.[1] as any).tasks, []);
   assert.equal(h.widgets.at(-1)?.[1], undefined);
+});
+
+test("completed lists hide after one minute and /tasks reveals them", async () => {
+  const originalSetTimeout = globalThis.setTimeout;
+  let scheduled: (() => void) | undefined;
+  globalThis.setTimeout = ((callback: (...args: any[]) => void, delay?: number) => {
+    assert.equal(delay, COMPLETED_HIDE_DELAY_MS);
+    scheduled = callback;
+    return { unref() {} } as ReturnType<typeof setTimeout>;
+  }) as typeof setTimeout;
+
+  try {
+    const h = harness();
+    await execute(h, { action: "set", tasks: ["One"] });
+    await execute(h, { action: "update", id: 1, status: "completed" });
+    assert.ok(scheduled);
+
+    scheduled();
+    assert.equal(h.widgets.at(-1)?.[1], undefined);
+
+    await h.commands.get("tasks").handler("", h.ctx);
+    assert.equal(typeof h.widgets.at(-1)?.[1], "function");
+    assert.match(String(h.notifications.at(-1)?.[0]), /1\/1 completed/);
+  } finally {
+    globalThis.setTimeout = originalSetTimeout;
+  }
 });

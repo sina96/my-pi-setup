@@ -29,6 +29,7 @@ A modular, shareable [Pi](https://pi.dev) coding environment. Each customization
 - **Herdr only** — [`herdr-blocked-state`](extensions/herdr-blocked-state/README.md) reports `ask_user` and permission-dialog waits as blocked state to Herdr.
 - **Herdr only** — [`herdr-subagents`](extensions/herdr-subagents/README.md) adds default-off, asynchronous Pi subagents in dedicated Herdr tabs with automatic result delivery.
 - [`permission-gate`](extensions/permission-gate/README.md) — Applies severity-aware approval to risky shell commands and sensitive file/search paths, with scoped policies, exact-command approvals, optional Herdr blocked state, and session YOLO mode.
+- [`package-manager-policy`](extensions/package-manager-policy/README.md) — Defaults new projects to pnpm and uv, respects established project managers, and provides session-adjustable warning or enforcement via `/package-manager`.
 - [`pi-clip`](extensions/pi-clip/README.md) — Adds `/clip` for selecting and copying code blocks, tables, lists, ranges, prompts, or responses.
 - **Herdr only** — [`pi-herdr-btw`](extensions/pi-herdr-btw/README.md) opens a context-aware, tool-enabled `/btw` side thread in a focused Herdr pane with optional merge-back.
 - [`pi-startup`](extensions/pi-startup/README.md) — Replaces the standard startup header with a responsive dashboard showing the Pi logo, resource counts, shortcuts, and version.

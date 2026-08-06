@@ -189,6 +189,7 @@ export default function sessionInsights(pi: ExtensionAPI) {
     description: "Tabbed session, usage, project, tool, and context insights popup",
     handler: show,
   };
+  pi.registerCommand("insights", command);
   pi.registerCommand("session-insights", command);
   pi.registerCommand("session-breakdown", command);
   pi.registerCommand("usage", command);

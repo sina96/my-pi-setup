@@ -26,11 +26,14 @@ For work with at least three concrete steps, the tool guidance asks the model to
 
 The widget shows up to eight rows, keeps the active row visible, and points to
 `/tasks` when additional rows are hidden. It disappears when the list is empty.
+After every task is completed, the full widget remains visible for one minute
+and then hides automatically without clearing the persisted task state. Running
+`/tasks` shows the complete list and restores the widget for another minute.
 
 ## Commands
 
 ```text
-/tasks         Show the complete list
+/tasks         Show the complete list and restore its widget
 /tasks clear   Clear the list after confirmation
 ```
 

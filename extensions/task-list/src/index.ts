@@ -24,6 +24,7 @@ const WIDGET_KEY = "simply-task-list";
 const MAX_TASKS = 30;
 const MAX_TEXT_LENGTH = 200;
 const MAX_WIDGET_TASKS = 8;
+export const COMPLETED_HIDE_DELAY_MS = 60_000;
 
 const TaskListSchema = Type.Object({
   action: StringEnum(["set", "add", "update", "list", "clear"] as const, {
@@ -160,14 +161,26 @@ export function widgetLines(theme: Theme, tasks: readonly TaskItem[], width: num
 export default function taskListExtension(pi: ExtensionAPI): void {
   let tasks: TaskItem[] = [];
   let nextId = 1;
+  let widgetHidden = false;
+  let hideTimer: ReturnType<typeof setTimeout> | undefined;
 
   function snapshot(action: TaskListDetails["action"]): TaskListDetails {
     return { version: 1, action, tasks: cloneTasks(tasks), nextId };
   }
 
+  function cancelHideTimer(): void {
+    if (hideTimer !== undefined) clearTimeout(hideTimer);
+    hideTimer = undefined;
+  }
+
+  function revealWidget(): void {
+    cancelHideTimer();
+    widgetHidden = false;
+  }
+
   function publish(ctx: ExtensionContext): void {
     if (!ctx.hasUI) return;
-    if (tasks.length === 0) {
+    if (tasks.length === 0 || widgetHidden) {
       ctx.ui.setWidget(WIDGET_KEY, undefined);
       return;
     }
@@ -179,12 +192,21 @@ export default function taskListExtension(pi: ExtensionAPI): void {
       }),
       { placement: "aboveEditor" },
     );
+    if (tasks.every((task) => task.status === "completed") && hideTimer === undefined) {
+      hideTimer = setTimeout(() => {
+        hideTimer = undefined;
+        widgetHidden = true;
+        if (ctx.hasUI) ctx.ui.setWidget(WIDGET_KEY, undefined);
+      }, COMPLETED_HIDE_DELAY_MS);
+      (hideTimer as { unref?: () => void }).unref?.();
+    }
   }
 
   function restore(ctx: ExtensionContext): void {
     const restored = restoreTaskState(ctx);
     tasks = restored.tasks;
     nextId = restored.nextId;
+    revealWidget();
     publish(ctx);
   }
 
@@ -192,6 +214,7 @@ export default function taskListExtension(pi: ExtensionAPI): void {
   pi.on("session_tree", (_event, ctx) => restore(ctx));
   pi.on("session_compact", (_event, ctx) => restore(ctx));
   pi.on("session_shutdown", (_event, ctx) => {
+    cancelHideTimer();
     if (ctx.hasUI) ctx.ui.setWidget(WIDGET_KEY, undefined);
   });
 
@@ -265,6 +288,7 @@ export default function taskListExtension(pi: ExtensionAPI): void {
         }
       }
 
+      if (params.action !== "list") revealWidget();
       publish(ctx);
       const details = snapshot(params.action);
       return {
@@ -288,12 +312,14 @@ export default function taskListExtension(pi: ExtensionAPI): void {
         if (ctx.hasUI && !await ctx.ui.confirm("Clear task list?", `${tasks.length} tasks will be removed.`)) return;
         tasks = [];
         nextId = 1;
+        revealWidget();
         pi.appendEntry(STATE_TYPE, snapshot("clear"));
         publish(ctx);
         ctx.ui.notify("Task list cleared", "info");
         return;
       }
       ctx.ui.notify(plainList(tasks), "info");
+      revealWidget();
       publish(ctx);
     },
   });

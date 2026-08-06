@@ -145,29 +145,62 @@ function table(
 }
 
 function contextView(context: ContextInsight, width: number, theme: Theme): string[] {
-  const barWidth = Math.max(12, Math.min(36, Math.floor(width * 0.42)));
-  const used = context.limit > 0
-    ? Math.max(0, Math.min(barWidth, Math.round((context.total / context.limit) * barWidth)))
-    : 0;
-  const ratio = context.limit > 0 ? context.total / context.limit : 0;
-  const barColor = ratio > 0.8 ? "error" : ratio > 0.5 ? "warning" : "success";
-  const bar = theme.fg(barColor, `${"█".repeat(used)}${"░".repeat(barWidth - used)}`);
-  const nameWidth = Math.max(16, width - 31);
-  const lines = [
-    `${theme.fg("accent", theme.bold("Current context"))}  ${theme.fg("dim", context.model)}`,
-    `${bar}  ${formatCount(context.total)} / ${formatCount(context.limit)}  ${theme.fg("dim", `free ${formatCount(context.free)}`)}`,
-    theme.fg("dim", context.measured ? "Total uses provider-reported context usage; category rows are estimates." : "Context usage and category rows are estimated."),
-    "",
-    `${theme.fg("muted", fit("category", nameWidth))}  ${theme.fg("muted", fit("tokens", 11, true))}  ${theme.fg("muted", fit("share", 8, true))}`,
-    theme.fg("borderMuted", "─".repeat(Math.max(0, width))),
+  type ContextColor = Parameters<Theme["fg"]>[0];
+  const colors: ContextColor[] = ["muted", "dim", "success", "accent", "borderMuted"];
+  const categories = [
+    ...context.categories,
+    { name: "Available", tokens: context.free },
   ];
-  for (const row of context.categories) {
-    const share = context.limit > 0 ? `${((row.tokens / context.limit) * 100).toFixed(1)}%` : "0%";
-    const label = row.detail ? `${row.name} · ${row.detail}` : row.name;
-    lines.push(`${fit(label, nameWidth)}  ${theme.fg("accent", fit(formatCount(row.tokens), 11, true))}  ${theme.fg("dim", fit(share, 8, true))}`);
+  const gridWidth = 10;
+  const gridHeight = 5;
+  const blockCount = gridWidth * gridHeight;
+  const exactBlocks = categories.map((row) => context.limit > 0 ? (row.tokens / context.limit) * blockCount : 0);
+  const allocations = exactBlocks.map(Math.floor);
+  let remaining = blockCount - allocations.reduce((sum, count) => sum + count, 0);
+  const allocationOrder = exactBlocks
+    .map((value, index) => ({ index, fraction: value - Math.floor(value) }))
+    .sort((left, right) => right.fraction - left.fraction);
+  for (let index = 0; index < allocationOrder.length && remaining > 0; index += 1, remaining -= 1) {
+    allocations[allocationOrder[index].index] += 1;
+  }
+
+  const blocks = categories.flatMap((row, index) => Array.from(
+    { length: allocations[index] },
+    () => theme.fg(colors[index], row.name === "Available" ? "□ " : "■ "),
+  ));
+  const gridLines = Array.from({ length: gridHeight }, (_, row) =>
+    blocks.slice(row * gridWidth, (row + 1) * gridWidth).join("").trimEnd(),
+  );
+  const percent = context.limit > 0 ? (context.total / context.limit) * 100 : 0;
+  const detailLines = [
+    `${theme.bold("Total Usage")}  ${theme.bold(formatCount(context.total))} ${theme.fg("dim", `(${percent.toFixed(1)}%)`)}`,
+    "",
+    ...categories.map((category, index) => {
+      const share = context.limit > 0 ? (category.tokens / context.limit) * 100 : 0;
+      const icon = category.name === "Available" ? "□" : "■";
+      const detail = "detail" in category && category.detail ? ` · ${category.detail}` : "";
+      return `${theme.fg(colors[index], icon)} ${fit(category.name, 15)} ${theme.fg("accent", fit(formatCount(category.tokens), 9, true))} ${theme.fg("dim", fit(`${share.toFixed(1)}%`, 7, true))}${theme.fg("dim", detail)}`;
+    }),
+  ];
+
+  const lines = [
+    `${theme.fg("accent", theme.bold("Context Usage"))}  ${theme.fg("dim", context.model)}`,
+    theme.fg("dim", context.measured
+      ? "Total is provider-reported; category distribution is estimated and calibrated to it."
+      : "Total and category distribution are estimated."),
+    "",
+  ];
+  const gridCellWidth = 20;
+  if (width >= 62) {
+    const rowCount = Math.max(gridLines.length, detailLines.length);
+    for (let index = 0; index < rowCount; index += 1) {
+      lines.push(`${fit(gridLines[index] ?? "", gridCellWidth)}    ${detailLines[index] ?? ""}`);
+    }
+  } else {
+    lines.push(...gridLines, "", ...detailLines);
   }
   if (context.roles.length > 0) {
-    lines.push("", theme.fg("muted", "Conversation by role"));
+    lines.push("", theme.fg("muted", "Messages by role"));
     lines.push(context.roles.map((row) => `${row.name} ${formatCount(row.tokens)}`).join("  ·  "));
   }
   return lines;

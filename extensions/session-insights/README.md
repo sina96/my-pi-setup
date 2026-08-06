@@ -5,11 +5,11 @@ insights. The session parser is based on Armin Ronacher's Apache-2.0
 [`session-breakdown.ts`](https://raw.githubusercontent.com/mitsuhiko/agent-stuff/refs/heads/main/extensions/session-breakdown.ts).
 
 The popup layout and tab treatment take visual inspiration from the MIT-licensed
-[`pi-atlas`](https://github.com/MohnDoe/pi-atlas/tree/707f84fe3fd051dd2925a2a5959a319e7be5489d/media),
-while the Context tab is conceptually inspired by
-[`context-command.ts`](https://github.com/abhinand5/pi-setup/blob/39f1eced5ce9655ca0ad43e77cd6f83ec63ac0dd/extensions/context-command.ts).
-The implementation here is purpose-built for this extension and uses only Pi's
-local APIs and session files.
+[`pi-atlas`](https://github.com/MohnDoe/pi-atlas/tree/707f84fe3fd051dd2925a2a5959a319e7be5489d/media).
+The Context tab's block-grid presentation is inspired by Claude Code and the
+MIT-licensed [`pi-context`](https://github.com/ttttmr/pi-context), while its
+accounting and responsive rendering are independently implemented for this
+extension using only Pi's local APIs and session files.
 
 ## Popup tabs
 
@@ -18,18 +18,24 @@ local APIs and session files.
 - **Models** — Model token usage and percentage share.
 - **Projects** — Project-directory token usage and percentage share.
 - **Tools** — Tool call totals and percentage share.
-- **Context** — Current model context usage, free space, and estimated consumption
-  from the system prompt, active tools, context files, skills, conversation, and
-  conversation roles.
+- **Context** — A Claude-style block grid for current model context usage and
+  available space, with estimated System Prompt, System Tools, Tool Activity,
+  and Messages categories plus a message-role breakdown.
 
-The Context total uses Pi's provider-reported context usage when available.
-Category rows are approximate token estimates and are labeled as such in the UI.
+The Context total uses Pi's provider-reported context usage when available. Its
+category distribution starts with local character-based estimates, includes the
+full active tool schemas and Pi's compaction-aware active message context, and is
+then calibrated to the reported total. Categories remain approximate and are
+labeled as such in the UI.
 
 ## Commands
 
-All three commands open the same centered popup:
+All four commands open the same centered popup. `/insights` is the concise
+full-dashboard command; no `/context` alias is registered, avoiding collisions
+with dedicated context-management extensions.
 
 ```text
+/insights
 /usage
 /session-insights
 /session-breakdown
