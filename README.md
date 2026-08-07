@@ -1,5 +1,4 @@
 # My Pi Setup
-<!-- herdr/zed fsevents test -->
 
 ![Screenshot](./assets/Pi-Setup-Screenshot-aug26.png)
 
