@@ -62,6 +62,44 @@ test("watches Herdr pane lifecycle events over the socket API", async () => {
   }
 });
 
+test("does not combine partial lifecycle frames across socket reconnects", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "herdr-subagents-"));
+  const socketPath = join(directory, "herdr.sock");
+  let connections = 0;
+  const server = createServer((socket) => {
+    connections += 1;
+    socket.once("data", () => {
+      if (connections === 1) {
+        socket.write('{"event":"pane.agent_status_changed","data":');
+        socket.end();
+        return;
+      }
+      socket.write(
+        `${JSON.stringify({
+          event: "pane.agent_status_changed",
+          data: { pane_id: "w1:p2", agent_status: "done" },
+        })}\n`,
+      );
+    });
+  });
+  await new Promise<void>((resolvePromise) => server.listen(socketPath, resolvePromise));
+  let watcher: HerdrLifecycleWatcher | undefined;
+  try {
+    const event = await new Promise<{ paneId: string; status: string }>(
+      (resolvePromise) => {
+        watcher = new HerdrLifecycleWatcher(socketPath, resolvePromise);
+        watcher.start(["w1:p2"]);
+      },
+    );
+    assert.deepEqual(event, { paneId: "w1:p2", status: "done" });
+    assert.equal(connections, 2);
+  } finally {
+    watcher?.stop();
+    await new Promise<void>((resolvePromise) => server.close(() => resolvePromise()));
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
 test("shell quotes apostrophes", () => {
   assert.equal(manager.shellQuote("it's ready"), `'it'"'"'s ready'`);
 });

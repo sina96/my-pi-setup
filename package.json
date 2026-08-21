@@ -7,7 +7,7 @@
   },
   "scripts": {
     "test": "tsx --test extensions/*/test.ts extensions/*/test/*.test.ts",
-    "check": "npm run test && git diff --check"
+    "check": "npm run test && git diff --check \"${GITHUB_BASE_SHA:-HEAD^}\" HEAD"
   },
   "keywords": [
     "pi-package"

@@ -1,4 +1,8 @@
 import assert from "node:assert/strict";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { convertToLlm, serializeConversation, SessionManager } from "@earendil-works/pi-coding-agent";
 import test from "node:test";
 import extension, { __test } from "./src/index.ts";
 
@@ -24,6 +28,32 @@ test("bounds large transcripts while retaining both ends", () => {
   assert.match(result.text, /^start-/);
   assert.match(result.text, /-end$/);
   assert.match(result.text, /content omitted/);
+  assert.ok(result.text.length <= 100);
+});
+
+test("includes compaction summaries in a reconstructed session transcript", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "session-recall-"));
+  try {
+    const manager = SessionManager.create(directory, directory);
+    manager.appendMessage({
+      role: "user",
+      content: [{ type: "text", text: "discarded context" }],
+      timestamp: Date.now(),
+    } as never);
+    const retainedId = manager.appendMessage({
+      role: "assistant",
+      content: [{ type: "text", text: "retained context" }],
+      timestamp: Date.now(),
+    } as never);
+    manager.appendCompaction("COMPACTION SUMMARY: chosen approach", retainedId, 42);
+
+    const transcript = serializeConversation(convertToLlm(__test.sessionMessages(manager)));
+    assert.match(transcript, /COMPACTION SUMMARY: chosen approach/);
+    assert.match(transcript, /retained context/);
+    assert.doesNotMatch(transcript, /discarded context/);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
 });
 
 test("leaves a transcript within the budget intact", () => {

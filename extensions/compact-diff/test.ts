@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { chmod, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { delimiter, join } from "node:path";
 import test from "node:test";
 import extension from "./src/index.ts";
 import {
@@ -214,10 +214,16 @@ test("falls back from Zed to a VS Code-compatible editor", () => {
 });
 
 test("launches Neovim in a Herdr pane with argument-safe file targeting", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "compact-diff-nvim-bin-"));
+  const fakeNvim = join(directory, "nvim");
+  await writeFile(fakeNvim, "#!/bin/sh\nexit 0\n", "utf8");
+  await chmod(fakeNvim, 0o755);
   const previousHerdr = process.env.HERDR_ENV;
   const previousPane = process.env.HERDR_PANE_ID;
+  const previousPath = process.env.PATH;
   process.env.HERDR_ENV = "1";
   process.env.HERDR_PANE_ID = "w1:p2";
+  process.env.PATH = `${directory}${delimiter}${previousPath ?? ""}`;
   const calls: Array<{ command: string; args: string[] }> = [];
   try {
     const message = await performFileAction(
@@ -260,6 +266,9 @@ test("launches Neovim in a Herdr pane with argument-safe file targeting", async 
     else process.env.HERDR_ENV = previousHerdr;
     if (previousPane == null) delete process.env.HERDR_PANE_ID;
     else process.env.HERDR_PANE_ID = previousPane;
+    if (previousPath == null) delete process.env.PATH;
+    else process.env.PATH = previousPath;
+    await rm(directory, { recursive: true, force: true });
   }
 });
 

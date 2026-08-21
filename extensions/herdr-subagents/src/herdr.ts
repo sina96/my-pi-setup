@@ -229,6 +229,7 @@ export class HerdrLifecycleWatcher {
   private connect(): void {
     if (this.stopped || !this.socketPath || this.socket || !this.paneIds.length)
       return;
+    this.buffer = "";
     const socket = createConnection(this.socketPath);
     this.socket = socket;
     socket.setEncoding("utf8");
@@ -248,7 +249,12 @@ export class HerdrLifecycleWatcher {
     socket.on("data", (chunk: string) => this.receive(chunk));
     socket.on("error", () => undefined);
     socket.on("close", () => {
-      if (this.socket === socket) this.socket = undefined;
+      // A replaced socket may close after its successor has connected. Its
+      // partial frame was discarded by disconnect(), so never clear the new
+      // socket's buffer here.
+      if (this.socket !== socket) return;
+      this.socket = undefined;
+      this.buffer = "";
       if (!this.stopped && this.paneIds.length) this.scheduleReconnect();
     });
   }
@@ -289,6 +295,7 @@ export class HerdrLifecycleWatcher {
     this.retry = undefined;
     const socket = this.socket;
     this.socket = undefined;
+    this.buffer = "";
     socket?.destroy();
   }
 
