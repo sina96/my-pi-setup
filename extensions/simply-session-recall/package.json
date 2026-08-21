@@ -1,0 +1,17 @@
+{
+  "name": "simply-session-recall",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "On-demand Pi session recall using simply-file-search and a focused query tool",
+  "keywords": ["pi-package", "pi-extension", "session-recall", "memory"],
+  "license": "MIT",
+  "peerDependencies": {
+    "@earendil-works/pi-ai": "*",
+    "@earendil-works/pi-coding-agent": "*",
+    "typebox": "*"
+  },
+  "pi": {
+    "extensions": ["./src/index.ts"]
+  }
+}

@@ -24,6 +24,8 @@ For work with at least three concrete steps, the tool guidance asks the model to
 3. Mark an item `completed` only after verification.
 4. Update the list when scope changes.
 
+Task lists are independent from `simply-goal`: completing a list does not create or complete a `/goal`, so the agent should report completion normally rather than call `finish_goal`.
+
 The widget shows up to eight rows, keeps the active row visible, and points to
 `/tasks` when additional rows are hidden. It disappears when the list is empty.
 After every task is completed, the full widget remains visible for one minute

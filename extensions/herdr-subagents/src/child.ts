@@ -47,6 +47,33 @@ async function writeAtomic(path: string, value: ChildResult): Promise<void> {
   await rename(temporary, path);
 }
 
+async function reportPublishedResult(pi: ExtensionAPI): Promise<void> {
+  const paneId = process.env.HERDR_PANE_ID;
+  const source = process.env.PI_HERDR_SUBAGENT_SOURCE;
+  if (!paneId || !source) return;
+  // This is a wake-up signal only; result.json remains the authoritative,
+  // atomic payload consumed by the parent extension.
+  await pi
+    .exec(
+      "herdr",
+      [
+        "pane",
+        "report-agent",
+        paneId,
+        "--source",
+        source,
+        "--agent",
+        "pi",
+        "--state",
+        "idle",
+        "--message",
+        "subagent result published",
+      ],
+      { timeout: 5_000 },
+    )
+    .catch(() => undefined);
+}
+
 export function registerChildReporter(
   pi: ExtensionAPI,
   resultPath: string,
@@ -96,6 +123,7 @@ export function registerChildReporter(
 
     try {
       await writeAtomic(resultPath, result);
+      await reportPublishedResult(pi);
     } catch (error) {
       console.error(
         `[herdr-subagents] Failed to write child result: ${error instanceof Error ? error.message : String(error)}`,

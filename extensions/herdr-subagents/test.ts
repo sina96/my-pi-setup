@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
+import { mkdtemp, rm } from "node:fs/promises";
+import { createServer } from "node:net";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import test from "node:test";
 import { visibleWidth } from "@earendil-works/pi-tui";
-import { __test as herdr } from "./src/herdr.ts";
+import { __test as herdr, HerdrLifecycleWatcher } from "./src/herdr.ts";
 import extension from "./src/index.ts";
 import { __test as manager, resolveTrust } from "./src/manager.ts";
 import { popupInputAction, renderSubagentsPopup } from "./src/popup.ts";
@@ -25,6 +29,37 @@ test("finds labels across supported pane record shapes", () => {
     ),
     [{ pane_id: "1-2" }],
   );
+});
+
+test("watches Herdr pane lifecycle events over the socket API", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "herdr-subagents-"));
+  const socketPath = join(directory, "herdr.sock");
+  const server = createServer((socket) => {
+    socket.once("data", (request) => {
+      assert.match(request.toString(), /events.subscribe/);
+      socket.write(
+        `${JSON.stringify({
+          event: "pane.agent_status_changed",
+          data: { pane_id: "w1:p2", agent_status: "idle" },
+        })}\n`,
+      );
+    });
+  });
+  await new Promise<void>((resolvePromise) => server.listen(socketPath, resolvePromise));
+  let watcher: HerdrLifecycleWatcher | undefined;
+  try {
+    const event = await new Promise<{ paneId: string; status: string }>(
+      (resolvePromise) => {
+        watcher = new HerdrLifecycleWatcher(socketPath, resolvePromise);
+        watcher.start(["w1:p2"]);
+      },
+    );
+    assert.deepEqual(event, { paneId: "w1:p2", status: "idle" });
+  } finally {
+    watcher?.stop();
+    await new Promise<void>((resolvePromise) => server.close(() => resolvePromise()));
+    await rm(directory, { recursive: true, force: true });
+  }
 });
 
 test("shell quotes apostrophes", () => {

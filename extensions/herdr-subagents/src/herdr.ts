@@ -1,3 +1,4 @@
+import { createConnection, type Socket } from "node:net";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 
 interface PaneRecord {
@@ -178,6 +179,126 @@ export async function closePane(
     throw new Error(
       `Failed to close subagent pane: ${result.stderr.trim() || result.stdout.trim()}`,
     );
+  }
+}
+
+export interface PaneAgentStatusEvent {
+  paneId: string;
+  status: "idle" | "working" | "blocked" | "done" | "unknown";
+}
+
+type LifecycleListener = (event: PaneAgentStatusEvent) => void;
+
+/**
+ * A small persistent client for Herdr's public `events.subscribe` socket API.
+ * The protocol is newline-delimited JSON; subscriptions are replaced by
+ * reconnecting when the tracked pane set changes.
+ */
+export class HerdrLifecycleWatcher {
+  private socket?: Socket;
+  private retry?: ReturnType<typeof setTimeout>;
+  private stopped = true;
+  private paneIds: string[] = [];
+  private buffer = "";
+
+  constructor(
+    private readonly socketPath: string | undefined,
+    private readonly listener: LifecycleListener,
+  ) {}
+
+  start(paneIds: Iterable<string>): void {
+    this.stopped = false;
+    this.update(paneIds);
+  }
+
+  update(paneIds: Iterable<string>): void {
+    const next = [...new Set(paneIds)].sort();
+    if (next.join("\u0000") === this.paneIds.join("\u0000") && this.socket)
+      return;
+    this.paneIds = next;
+    this.disconnect();
+    if (this.paneIds.length) this.connect();
+  }
+
+  stop(): void {
+    this.stopped = true;
+    this.paneIds = [];
+    this.disconnect();
+  }
+
+  private connect(): void {
+    if (this.stopped || !this.socketPath || this.socket || !this.paneIds.length)
+      return;
+    const socket = createConnection(this.socketPath);
+    this.socket = socket;
+    socket.setEncoding("utf8");
+    socket.on("connect", () => {
+      const subscriptions = this.paneIds.map((pane_id) => ({
+        type: "pane.agent_status_changed",
+        pane_id,
+      }));
+      socket.write(
+        `${JSON.stringify({
+          id: `herdr-subagents-${Date.now()}`,
+          method: "events.subscribe",
+          params: { subscriptions },
+        })}\n`,
+      );
+    });
+    socket.on("data", (chunk: string) => this.receive(chunk));
+    socket.on("error", () => undefined);
+    socket.on("close", () => {
+      if (this.socket === socket) this.socket = undefined;
+      if (!this.stopped && this.paneIds.length) this.scheduleReconnect();
+    });
+  }
+
+  private receive(chunk: string): void {
+    this.buffer += chunk;
+    for (;;) {
+      const newline = this.buffer.indexOf("\n");
+      if (newline < 0) return;
+      const line = this.buffer.slice(0, newline);
+      this.buffer = this.buffer.slice(newline + 1);
+      try {
+        const event = JSON.parse(line) as {
+          event?: unknown;
+          data?: { pane_id?: unknown; agent_status?: unknown };
+        };
+        if (
+          event.event === "pane.agent_status_changed" &&
+          typeof event.data?.pane_id === "string" &&
+          typeof event.data.agent_status === "string" &&
+          ["idle", "working", "blocked", "done", "unknown"].includes(
+            event.data.agent_status,
+          )
+        ) {
+          this.listener({
+            paneId: event.data.pane_id,
+            status: event.data.agent_status as PaneAgentStatusEvent["status"],
+          });
+        }
+      } catch {
+        // Ignore malformed socket frames and retain the polling fallback.
+      }
+    }
+  }
+
+  private disconnect(): void {
+    if (this.retry) clearTimeout(this.retry);
+    this.retry = undefined;
+    const socket = this.socket;
+    this.socket = undefined;
+    socket?.destroy();
+  }
+
+  private scheduleReconnect(): void {
+    if (this.retry) return;
+    this.retry = setTimeout(() => {
+      this.retry = undefined;
+      this.connect();
+    }, 2_000);
+    this.retry.unref?.();
   }
 }
 
