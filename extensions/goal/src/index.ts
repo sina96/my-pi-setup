@@ -258,7 +258,7 @@ export default function goalExtension(pi: ExtensionAPI) {
   pi.registerTool({
     name: "finish_goal",
     label: "Finish Goal",
-    description: "Mark the active goal complete after requirement-by-requirement verification, or blocked when user input/external change is required.",
+    description: "Only when a /goal is active: mark it complete after requirement-by-requirement verification, or blocked when user input/external change is required. Do not call this merely because a task list is complete.",
     parameters: Type.Object({
       status: Type.Union([Type.Literal("complete"), Type.Literal("blocked")]),
       report: Type.String({ description: "Concise verification evidence, or the exact blocker and required next action" }),

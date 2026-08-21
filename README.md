@@ -1,5 +1,7 @@
 # My Pi Setup
 
+[![CI](https://github.com/sina96/my-pi-setup/actions/workflows/ci.yml/badge.svg)](https://github.com/sina96/my-pi-setup/actions/workflows/ci.yml)
+
 ![Screenshot](./assets/Pi-Setup-Screenshot-aug26.png)
 
 A modular, shareable [Pi](https://pi.dev) coding environment. Each customization stays separate so it can be installed, removed, or adapted independently. Please do not hard-copy the setup unchanged—use it as a starting point and customize it for your own workflow.
@@ -34,6 +36,7 @@ A modular, shareable [Pi](https://pi.dev) coding environment. Each customization
 - [`plan-mode`](extensions/plan-mode/README.md) — Provides a PLAN → EXECUTE workflow with read-only planning tools and controlled transition into implementation.
 - [`review`](extensions/review/README.md) — Adds a temporary read-only `/review` workflow for working trees, branches, commits, paths, and GitHub pull requests.
 - [`session-insights`](extensions/session-insights/README.md) — Adds a tabbed Neovim-style `/usage` popup for session, token, cost, model, project, tool, and current-context insights.
+- [`simply-session-recall`](extensions/simply-session-recall/README.md) — Recalls selected past Pi sessions through `simply_find`/`simply_grep` discovery and focused model queries.
 - [`simply-file-search`](extensions/simply-file-search/README.md) — Registers fast `simply_find` and `simply_grep` tools backed by `fd`, `rg`, and optional fuzzy ranking through `fzf`.
 - [`starship-statusline`](extensions/starship-statusline/README.md) — Adds a configurable Starship-powered footer with model and Git information.
 - [`task-list`](extensions/task-list/README.md) — Gives the agent a session-persistent task list and visualizes pending, active, and completed work above the editor.

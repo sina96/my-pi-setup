@@ -9,6 +9,7 @@ import type {
 import {
   closePane,
   createTab,
+  HerdrLifecycleWatcher,
   interruptPane,
   resolvePaneId,
   runInPane,
@@ -17,7 +18,9 @@ import type { ChildResult, SubagentRun } from "./types.ts";
 
 const MAX_RUNNING = 4;
 const MAX_TRACKED = 64;
-const POLL_MS = 500;
+// Socket lifecycle events wake result delivery immediately. This slow poll is
+// only reconciliation after a socket disconnect, reload, or missed event.
+const POLL_MS = 5_000;
 const RESULT_MAX_CHARS = 24 * 1024;
 const RUNTIME_KEY = Symbol.for("simply-herdr-subagents/runtime-v1");
 
@@ -102,6 +105,13 @@ export class SubagentManager {
   private pendingDelivery = new Set<string>();
   private timer?: ReturnType<typeof setInterval>;
   private ticking = false;
+  private lifecycle = new HerdrLifecycleWatcher(
+    process.env.HERDR_SOCKET_PATH,
+    ({ paneId }) => {
+      if (this.list().some((run) => !isTerminal(run) && run.paneId === paneId))
+        void this.tick();
+    },
+  );
   private counter = 0;
   private reserved = 0;
 
@@ -110,6 +120,7 @@ export class SubagentManager {
     this.ctx = ctx;
     this.deliver = deliver;
     this.startPolling();
+    this.refreshLifecycleWatcher();
     this.notify();
   }
 
@@ -188,6 +199,7 @@ export class SubagentManager {
         "env",
         "PI_HERDR_SUBAGENT_CHILD=1",
         `PI_HERDR_SUBAGENT_ID=${shellQuote(id)}`,
+        `PI_HERDR_SUBAGENT_SOURCE=${shellQuote(`herdr-subagents:${token}`)}`,
         `PI_HERDR_SUBAGENT_RESULT=${shellQuote(resultPath)}`,
         args.map(shellQuote).join(" "),
       ].join(" ");
@@ -220,6 +232,7 @@ export class SubagentManager {
       try {
         await runInPane(this.pi, paneId, `bash ${shellQuote(scriptPath)}`);
         run.status = "running";
+        this.refreshLifecycleWatcher();
         this.notify();
         return run;
       } catch (error) {
@@ -351,6 +364,7 @@ export class SubagentManager {
   reset(): void {
     this.runs.clear();
     this.pendingDelivery.clear();
+    this.lifecycle.stop();
     this.counter = 0;
     this.reserved = 0;
     this.notify();
@@ -397,6 +411,15 @@ export class SubagentManager {
   private stopPolling(): void {
     if (this.timer) clearInterval(this.timer);
     this.timer = undefined;
+    this.lifecycle.stop();
+  }
+
+  private refreshLifecycleWatcher(): void {
+    this.lifecycle.start(
+      this.list()
+        .filter((run) => !isTerminal(run))
+        .map((run) => run.paneId),
+    );
   }
 
   private async tick(): Promise<void> {
@@ -446,6 +469,7 @@ export class SubagentManager {
   }
 
   private settle(run: SubagentRun): void {
+    this.refreshLifecycleWatcher();
     if (!run.consumed && !run.delivered) {
       this.pendingDelivery.add(run.id);
       if (this.ctx?.isIdle()) this.flushDeliveries();

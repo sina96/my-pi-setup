@@ -2,6 +2,13 @@
   "name": "sina96-my-pi-setup",
   "version": "1.0.0",
   "private": true,
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "test": "tsx --test extensions/*/test.ts extensions/*/test/*.test.ts",
+    "check": "npm run test && git diff --check \"${GITHUB_BASE_SHA:-HEAD^}\" HEAD"
+  },
   "keywords": [
     "pi-package"
   ],
@@ -28,5 +35,8 @@
     "prompts": [
       "./extensions/token-optimizer/prompts/*.md"
     ]
+  },
+  "devDependencies": {
+    "tsx": "^4.23.12"
   }
 }

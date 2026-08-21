@@ -34,7 +34,7 @@ When enabled, the extension activates:
 - `subagent_wait` — explicitly wait and consume automatic delivery
 - `subagent_list` — list tracked runs
 
-Each child gets its own Herdr tab and Pi session. Completion is published through an atomic result sidecar and delivered to the parent as a follow-up message. Artifacts are stored below `~/.pi/agent/herdr-subagents/` (or `$PI_CODING_AGENT_DIR/herdr-subagents/`).
+Each child gets its own Herdr tab and Pi session. On settling, it atomically publishes `result.json`, then reports an `idle` lifecycle state to Herdr. The parent maintains a Herdr `pane.agent_status_changed` socket subscription, reads the sidecar immediately on that signal, and delivers the result as a Pi follow-up message. A 5-second reconciliation poll remains for socket reconnects, reloads, missed events, and unexpected process exits. Artifacts are stored below `~/.pi/agent/herdr-subagents/` (or `$PI_CODING_AGENT_DIR/herdr-subagents/`).
 
 ## Current scope
 

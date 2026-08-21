@@ -227,6 +227,7 @@ export default function taskListExtension(pi: ExtensionAPI): void {
       "Use task_list for non-trivial work with 3 or more concrete steps; call set before implementation so the user can see the plan.",
       "Keep task_list accurate as work proceeds: mark exactly one task in_progress before working on it, then mark it completed immediately after it is verified.",
       "Do not mark a task completed while its implementation or verification is incomplete; update the list when scope changes.",
+      "A task list does not create a /goal. When all tasks are complete, report the result normally; call finish_goal only when an active /goal explicitly exists.",
       "Skip task_list for one-step fixes, quick answers, and purely conversational requests.",
     ],
     parameters: TaskListSchema,
