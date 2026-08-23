@@ -126,7 +126,7 @@ function compactState(tasks: readonly TaskItem[]): string {
   if (tasks.length === 0) return "No tasks remain.";
   const done = tasks.filter((task) => task.status === "completed").length;
   const active = tasks.find((task) => task.status === "in_progress");
-  return `Tasks: ${done}/${tasks.length} complete${active ? `; active #${active.id}` : "; none active"}. Use action=list only when the full list is needed.`;
+  return `Tasks: ${done}/${tasks.length} complete${active ? `; active \`#${active.id}\`` : "; none active"}. Use action=list only when the full list is needed.`;
 }
 
 function themedTask(theme: Theme, task: TaskItem): string {

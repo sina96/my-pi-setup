@@ -27,7 +27,7 @@ This version is tailored to this setup's safety and modularity preferences:
 /review paths src test          Snapshot review of project paths
 /review pr 123                  GitHub PR without checkout
 /review status                  Show whether review mode is active
-/review off                     Abort review mode and restore tools
+/review off                     Abort review mode and clear its call gate
 ```
 
 Add one review-specific focus after ` -- `:
@@ -47,7 +47,7 @@ repository.
    `tool_call` gate.
 3. A themed `REVIEW · read-only` widget appears.
 4. The agent receives a concise review rubric and target-specific instructions.
-5. On `agent_end`, previous tools are restored automatically.
+5. On `agent_end`, review mode and its read-only call gate are cleared.
 
 This is intentionally a single review turn in the current session. There is no
 `/end-review`, hidden branch navigation, or automatic fix pass. If findings should
@@ -67,8 +67,9 @@ The rubric requires:
 It excludes speculative issues, ordinary style feedback, and pre-existing bugs in
 diff-based reviews.
 
-If `REVIEW_GUIDELINES.md` exists at the current working directory, its contents
-are appended to the system review instructions.
+If `REVIEW_GUIDELINES.md` exists at the current working directory, it is used
+only when the project is trusted, the path is a regular non-symlinked file, and
+the user explicitly confirms adding its untrusted text to the review prompt.
 
 ## Safety notes
 

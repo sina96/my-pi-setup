@@ -19,15 +19,16 @@ const number = (value: unknown): number => {
   return Number.isFinite(parsed) ? parsed : 0;
 };
 
-function usageParts(usage: any): Omit<UsageTotals, "cost"> {
+export function usageParts(usage: any): Omit<UsageTotals, "cost"> {
   const input = number(usage?.input ?? usage?.inputTokens ?? usage?.input_tokens ?? usage?.promptTokens ?? usage?.prompt_tokens);
   const output = number(usage?.output ?? usage?.outputTokens ?? usage?.output_tokens ?? usage?.completionTokens ?? usage?.completion_tokens);
   const cacheRead = number(usage?.cacheRead ?? usage?.cache_read ?? usage?.cacheReadTokens);
   const cacheWrite = number(usage?.cacheWrite ?? usage?.cache_write ?? usage?.cacheWriteTokens);
   const reasoning = number(usage?.reasoning ?? usage?.reasoningTokens ?? usage?.reasoning_tokens);
   const reportedTotal = usage?.totalTokens ?? usage?.total_tokens ?? usage?.tokens?.total ?? usage?.tokens;
-  const tokens = typeof reportedTotal === "number" && Number.isFinite(reportedTotal)
-    ? Math.max(0, reportedTotal)
+  const tokens = typeof reportedTotal === "number" &&
+      Number.isFinite(reportedTotal) && reportedTotal >= 0
+    ? reportedTotal
     : input + output + cacheRead + cacheWrite;
   return { input, output, cacheRead, cacheWrite, reasoning, tokens };
 }

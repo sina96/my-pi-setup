@@ -59,27 +59,52 @@ function formatTime(seconds: number): string {
   return `${seconds}s`;
 }
 
-function usageTokens(messages: unknown[]): {
+type NormalizedUsage = {
   total: number;
   cacheRead: number;
   cacheWrite: number;
-} {
+};
+
+function nonNegative(value: unknown): number {
+  const parsed = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(parsed) ? Math.max(0, parsed) : 0;
+}
+
+export function normalizeUsage(usage: Record<string, any>): NormalizedUsage {
+  const input = nonNegative(
+    usage.input ?? usage.inputTokens ?? usage.input_tokens ??
+    usage.promptTokens ?? usage.prompt_tokens,
+  );
+  const output = nonNegative(
+    usage.output ?? usage.outputTokens ?? usage.output_tokens ??
+    usage.completionTokens ?? usage.completion_tokens,
+  );
+  const cacheRead = nonNegative(
+    usage.cacheRead ?? usage.cache_read ?? usage.cacheReadTokens ??
+    usage.cache_read_tokens,
+  );
+  const cacheWrite = nonNegative(
+    usage.cacheWrite ?? usage.cache_write ?? usage.cacheWriteTokens ??
+    usage.cache_write_tokens,
+  );
+  const reportedTotal =
+    usage.totalTokens ?? usage.total_tokens ?? usage.tokens?.total ?? usage.tokens;
+  const total = typeof reportedTotal === "number" &&
+      Number.isFinite(reportedTotal) && reportedTotal >= 0
+    ? reportedTotal
+    : input + output + cacheRead + cacheWrite;
+  return { total, cacheRead, cacheWrite };
+}
+
+export function usageTokens(messages: unknown[]): NormalizedUsage {
   const totals = { total: 0, cacheRead: 0, cacheWrite: 0 };
   for (const item of messages) {
-    const message = item as {
-      role?: string;
-      usage?: { totalTokens?: number; cacheRead?: number; cacheWrite?: number };
-    } | undefined;
+    const message = item as { role?: string; usage?: Record<string, any> } | undefined;
     if (message?.role !== "assistant" || !message.usage) continue;
-    if (Number.isFinite(message.usage.totalTokens)) {
-      totals.total += Math.max(0, message.usage.totalTokens!);
-    }
-    if (Number.isFinite(message.usage.cacheRead)) {
-      totals.cacheRead += Math.max(0, message.usage.cacheRead!);
-    }
-    if (Number.isFinite(message.usage.cacheWrite)) {
-      totals.cacheWrite += Math.max(0, message.usage.cacheWrite!);
-    }
+    const usage = normalizeUsage(message.usage);
+    totals.total += usage.total;
+    totals.cacheRead += usage.cacheRead;
+    totals.cacheWrite += usage.cacheWrite;
   }
   return totals;
 }

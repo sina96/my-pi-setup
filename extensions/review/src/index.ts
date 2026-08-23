@@ -1,6 +1,6 @@
 // Adapted and substantially rewritten from mitsuhiko/agent-stuff's review.ts.
 // Local changes: single-turn reviews, strict read-only tools, no checkout/branching/fix loops.
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, lstatSync, readFileSync } from "node:fs";
 import { relative, resolve } from "node:path";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 
@@ -101,6 +101,40 @@ function prNumber(value: string): number | undefined {
   const match = value.match(/(?:^|\/pull\/)(\d+)(?:\D|$)/);
   const number = match ? Number(match[1]) : Number(value);
   return Number.isInteger(number) && number > 0 ? number : undefined;
+}
+
+export async function loadReviewGuidelines(
+  path: string,
+  ctx: Pick<ExtensionContext, "hasUI" | "isProjectTrusted" | "ui">,
+): Promise<string> {
+  let metadata: ReturnType<typeof lstatSync>;
+  try {
+    metadata = lstatSync(path);
+  } catch {
+    return "";
+  }
+  if (metadata.isSymbolicLink() || !metadata.isFile()) {
+    ctx.ui.notify("Ignored REVIEW_GUIDELINES.md because it is not a regular, non-symlinked file", "warning");
+    return "";
+  }
+  if (!ctx.isProjectTrusted()) {
+    ctx.ui.notify("Ignored REVIEW_GUIDELINES.md because the project is not trusted", "warning");
+    return "";
+  }
+  if (!ctx.hasUI || !await ctx.ui.confirm(
+    "Use project review guidelines?",
+    "REVIEW_GUIDELINES.md is untrusted project text that will be added to the review prompt.",
+  )) return "";
+
+  try {
+    // Recheck immediately before reading to reject a path replaced by a symlink
+    // while the confirmation dialog was open.
+    const current = lstatSync(path);
+    if (current.isSymbolicLink() || !current.isFile()) return "";
+    return readFileSync(path, "utf8").trim();
+  } catch {
+    return "";
+  }
 }
 
 export default function review(pi: ExtensionAPI) {
@@ -270,15 +304,10 @@ export default function review(pi: ExtensionAPI) {
     }
     active = true;
     reviewCwd = ctx.cwd;
-    reviewGuidelines = "";
-    const guidelinesPath = resolve(reviewCwd, "REVIEW_GUIDELINES.md");
-    if (existsSync(guidelinesPath)) {
-      try {
-        reviewGuidelines = readFileSync(guidelinesPath, "utf8").trim();
-      } catch {
-        // The review can proceed with the built-in rubric.
-      }
-    }
+    reviewGuidelines = await loadReviewGuidelines(
+      resolve(reviewCwd, "REVIEW_GUIDELINES.md"),
+      ctx,
+    );
     scope = targetScope(target);
     if (focus) scope += `\n\nAdditional focus requested by the user: ${focus}`;
     updateUi(ctx);

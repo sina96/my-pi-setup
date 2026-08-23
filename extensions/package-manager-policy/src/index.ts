@@ -325,6 +325,8 @@ export default function packageManagerPolicy(pi: ExtensionAPI): void {
   };
 
   pi.on("session_start", (_event, ctx) => {
+    detectedCwd = undefined;
+    detectedManagers = undefined;
     restore(ctx);
     void detect(ctx.cwd);
   });

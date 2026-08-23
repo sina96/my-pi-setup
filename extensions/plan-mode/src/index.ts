@@ -62,7 +62,7 @@ function extractAssistantText(messages: unknown[]): string | undefined {
   return undefined;
 }
 
-function isSafeBash(command: string): boolean {
+export function isSafeBash(command: string): boolean {
   if (!command.trim()) return false;
   if (/[;><`]|\$\(|\n/.test(command)) return false;
   if (/\b(?:rm|mv|cp|chmod|chown|touch|mkdir|rmdir|kill|sudo|tee)\b/.test(command)) return false;
@@ -70,7 +70,11 @@ function isSafeBash(command: string): boolean {
 
   const safeCommand = /^\s*(?:pwd|ls|find|fd|rg|grep|cat|head|tail|wc|stat|file|which|type|realpath)\b/;
   const safeGit = /^\s*git\s+(?:status|diff|log|show|branch\s+--show-current|rev-parse|ls-files)\b/;
-  return command.split(/\|/).every((part) => safeCommand.test(part) || safeGit.test(part));
+  const unsafeGitOption = /(?:^|\s)(?:--output(?:=|\s|$)|-o(?:=|\s|$)|--ext-diff\b|--textconv\b)/;
+  return command.split(/\|/).every((part) => {
+    if (safeCommand.test(part)) return true;
+    return safeGit.test(part) && !unsafeGitOption.test(part);
+  });
 }
 
 export default function planMode(pi: ExtensionAPI) {
@@ -130,7 +134,7 @@ export default function planMode(pi: ExtensionAPI) {
     state.mode = "execute";
     persist();
     updateUi(ctx);
-    ctx.ui.notify("Execute mode: tools restored", "info");
+    ctx.ui.notify("Execute mode active", "info");
     return true;
   };
 

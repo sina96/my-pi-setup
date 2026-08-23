@@ -48,6 +48,11 @@ test("set, update, and list maintain one active task", async () => {
   const result = await execute(h, { action: "update", id: 2, status: "in_progress" });
   assert.deepEqual(result.details.tasks.map((task: any) => task.status), ["pending", "in_progress", "pending"]);
   assert.match(result.content[0].text, /moved #1 back to pending/);
+  assert.match(result.content[0].text, /Tasks: 0\/3 complete; active `#2`/);
+  assert.doesNotMatch(result.content[0].text, /Inspect|Implement|Test/);
+
+  const listed = await execute(h, { action: "list" });
+  assert.match(listed.content[0].text, /Implement/);
   assert.equal(h.widgets.length >= 3, true);
 });
 

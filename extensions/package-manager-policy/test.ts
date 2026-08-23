@@ -124,6 +124,29 @@ test("defaults to pnpm and uv, then honors a session npm override", async () => 
   }
 });
 
+test("starts fresh manager detection for a new session in the same cwd", async () => {
+  const directory = await fixture();
+  try {
+    const h = harness(directory);
+    await h.handlers.get("session_start")?.[0]?.({}, h.ctx);
+    const first = await h.handlers.get("before_agent_start")?.[0]?.(
+      { systemPrompt: "base" },
+      h.ctx,
+    );
+    assert.match(first.systemPrompt, /Node: pnpm \(default\)/);
+
+    await writeFile(join(directory, "package-lock.json"), "{}");
+    await h.handlers.get("session_start")?.[0]?.({}, h.ctx);
+    const second = await h.handlers.get("before_agent_start")?.[0]?.(
+      { systemPrompt: "base" },
+      h.ctx,
+    );
+    assert.match(second.systemPrompt, /Node: npm/);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
 test("restores the latest valid session policy snapshot", () => {
   const restored = restorePolicyState({
     sessionManager: {

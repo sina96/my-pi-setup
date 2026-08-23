@@ -10,8 +10,7 @@ menus, and multi-plan management. It keeps the core safety workflow:
 2. Let the agent inspect the project and produce a self-contained `## Plan`.
 3. Review or refine the captured plan.
 4. Explicitly enter EXECUTE mode.
-5. The agent restores normal tools, implements the plan, validates it, and calls
-   `plan_complete`.
+5. The agent implements the plan, validates it, and calls `plan_complete`.
 
 ## Commands
 
@@ -19,7 +18,7 @@ menus, and multi-plan management. It keeps the core safety workflow:
 /plan             Toggle PLAN on, or turn the current mode off
 /plan on          Start a fresh planning pass
 /plan execute     Execute the most recently captured plan
-/plan off         Restore normal tools
+/plan off         Exit the current plan workflow
 /plan status      Show mode and whether a plan was captured
 ```
 
