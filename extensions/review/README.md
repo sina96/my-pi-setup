@@ -8,9 +8,9 @@ This version is tailored to this setup's safety and modularity preferences:
 - It **never checks out a branch or PR**.
 - It does not create session branches, run autonomous fix loops, or implement
   findings.
-- Review mode temporarily exposes only inspection tools.
+- Review mode keeps tool schemas stable for prompt caching and blocks calls to
+  anything except inspection tools.
 - `bash` receives a second conservative read-only allowlist.
-- The exact previously active tool set is restored when the review ends.
 - It refuses to overlap with local PLAN/EXECUTE mode.
 - GitHub PR review uses `gh pr view` and `gh pr diff` without touching the worktree.
 
@@ -43,7 +43,8 @@ repository.
 
 1. The extension validates the repository and target using argument-safe
    `pi.exec` calls rather than shell interpolation.
-2. It saves the currently active tools and switches to known inspection tools.
+2. It leaves the tool prefix stable and enforces known inspection tools at the
+   `tool_call` gate.
 3. A themed `REVIEW · read-only` widget appears.
 4. The agent receives a concise review rubric and target-specific instructions.
 5. On `agent_end`, previous tools are restored automatically.

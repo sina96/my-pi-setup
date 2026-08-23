@@ -41,9 +41,11 @@ manager's workflow.
 ## Enforcement
 
 Before each agent run, a concise policy summary is appended to the system
-prompt. Obvious conflicting package-manager commands sent through Pi's `bash`
-tool are blocked with an actionable replacement. This composes with other
-`tool_call` extensions and does not replace Bash rendering or execution.
+prompt. Project detection is cached for the session so repeated turns do not
+reread package metadata and the prompt remains byte-stable. Obvious conflicting
+package-manager commands sent through Pi's `bash` tool are blocked with an
+actionable replacement. This composes with other `tool_call` extensions and does
+not replace Bash rendering or execution.
 
 This is workflow enforcement, not a security sandbox. User `!` commands, custom
 tools, dynamically constructed shell commands, and arbitrary executable paths
@@ -65,6 +67,7 @@ reload, tree navigation, and compaction.
 /package-manager mode enforce    Block conflicting Bash commands (default)
 /package-manager mode warn       Warn without blocking
 /package-manager mode off        Disable guidance and interception
+/package-manager refresh         Reread project package-manager metadata
 /package-manager reset           Restore auto/enforce defaults
 ```
 

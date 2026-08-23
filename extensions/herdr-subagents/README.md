@@ -26,7 +26,9 @@ In TUI mode, `/subagents list` opens a Neovim-style popup. Use `j`/`k` or arrows
 
 ## Model tools
 
-When enabled, the extension activates:
+When enabled, the extension additively activates the tools below. Their guidance
+lives in tool descriptions rather than active-only system-prompt metadata, which
+preserves Pi's native deferred-tool prompt-cache path on supported models:
 
 - `subagent_spawn` — start a child and return immediately
 - `subagent_check` — inspect one tracked run

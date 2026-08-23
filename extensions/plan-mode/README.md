@@ -33,18 +33,18 @@ pi --plan
 
 ## Safety
 
-PLAN mode saves the currently active tool list and exposes only known read-only
-search/research tools. It keeps `bash` for inspection but permits a conservative
-allowlist such as `git status`, `git diff`, `ls`, `fd`, and `rg`. Shell redirects,
-command substitution, mutating commands, and execution flags are blocked.
+PLAN mode keeps the active tool schema stable for provider prompt caching, but
+blocks every call except known read-only search/research tools. It permits `bash`
+only through a conservative allowlist such as `git status`, `git diff`, `ls`,
+`fd`, and `rg`. Shell redirects, command substitution, mutating commands, and
+execution flags are blocked.
 
 This is a convenience boundary, not an operating-system sandbox. A hostile or
 unexpected external command could still have side effects; use a real sandbox for
 untrusted repositories.
 
-EXECUTE mode restores exactly the tool set that was active before PLAN mode and
-adds `plan_complete`. Outside EXECUTE mode, `plan_complete` is inactive and
-blocked.
+`plan_complete` stays registered so mode transitions do not invalidate the tool
+prefix. Outside EXECUTE mode, calls to it are blocked.
 
 ## Persistence
 

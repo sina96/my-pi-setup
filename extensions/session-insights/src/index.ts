@@ -67,10 +67,14 @@ export default function sessionInsights(pi: ExtensionAPI) {
     const stats = aggregate(data, days);
     const topModel = stats.models[0]?.name ?? "none";
     const topProject = stats.projects[0]?.name ?? "none";
+    const cacheEligible = stats.usage.input + stats.usage.cacheRead + stats.usage.cacheWrite;
+    const cacheHitRate = cacheEligible > 0
+      ? `${Math.round(stats.usage.cacheRead / cacheEligible * 100)}% cache hit`
+      : "no cache reads";
     return [
       `Session insights · last ${days} days`,
       `${formatCount(stats.sessions)} sessions · ${formatCount(stats.assistantTurns)} assistant turns · ${formatCount(stats.toolCalls)} tool calls`,
-      `${formatCount(stats.usage.tokens)} billed tokens · ${formatCost(stats.usage.cost)} estimated cost`,
+      `${formatCount(stats.usage.tokens)} processed tokens · ${formatCount(stats.usage.cacheRead)} cache read (${cacheHitRate}) · ${formatCost(stats.usage.cost)} estimated cost`,
       `Top model: ${topModel}`,
       `Top project: ${topProject}`,
     ].join("\n");
@@ -184,6 +188,14 @@ export default function sessionInsights(pi: ExtensionAPI) {
       force = true;
     }
   }
+
+  // Headless command output is useful to the caller but should not become
+  // permanent prompt baggage on a later model turn.
+  pi.on("context", (event) => ({
+    messages: event.messages.filter(
+      (message) => (message as { customType?: string }).customType !== "session-insights",
+    ),
+  }));
 
   const command = {
     description: "Tabbed session, usage, project, tool, and context insights popup",

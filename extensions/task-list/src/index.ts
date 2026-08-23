@@ -122,6 +122,13 @@ function plainList(tasks: readonly TaskItem[]): string {
   ].join("\n");
 }
 
+function compactState(tasks: readonly TaskItem[]): string {
+  if (tasks.length === 0) return "No tasks remain.";
+  const done = tasks.filter((task) => task.status === "completed").length;
+  const active = tasks.find((task) => task.status === "in_progress");
+  return `Tasks: ${done}/${tasks.length} complete${active ? `; active #${active.id}` : "; none active"}. Use action=list only when the full list is needed.`;
+}
+
 function themedTask(theme: Theme, task: TaskItem): string {
   const marker = task.status === "completed"
     ? theme.fg("success", "✓")
@@ -293,7 +300,7 @@ export default function taskListExtension(pi: ExtensionAPI): void {
       publish(ctx);
       const details = snapshot(params.action);
       return {
-        content: [{ type: "text" as const, text: params.action === "list" ? message : `${message}\n${plainList(tasks)}` }],
+        content: [{ type: "text" as const, text: params.action === "list" ? message : `${message}\n${compactState(tasks)}` }],
         details,
       };
     },

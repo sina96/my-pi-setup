@@ -36,7 +36,7 @@ const READ_ONLY_TOOLS = new Set([
 
 const PLAN_PROMPT = `You are in PLAN mode.
 
-Explore the project and produce a concrete implementation plan, but do not modify files or project state. Use only the available read-only tools. If a material requirement is ambiguous, use ask_user when available or ask one focused question in plain text.
+Produce a concrete implementation plan, but do not modify files or project state. Reuse conversation and tool evidence; inspect only relevant project state that is missing or may have changed. Use only read-only tools. If a material requirement is ambiguous, use ask_user when available or ask one focused question in plain text.
 
 End with a section headed "## Plan". Make each step self-contained: name relevant files, describe exact changes, note important constraints, and include validation commands. Do not claim to have implemented anything.`;
 
@@ -75,7 +75,6 @@ function isSafeBash(command: string): boolean {
 
 export default function planMode(pi: ExtensionAPI) {
   let state: PlanState = { mode: "off", plan: "" };
-  let savedTools: string[] | undefined;
 
   const persist = () => pi.appendEntry(ENTRY_TYPE, { ...state });
 
@@ -105,8 +104,6 @@ export default function planMode(pi: ExtensionAPI) {
     ctx.ui.setWidget("plan-mode", [ctx.ui.theme.fg(color, `◆ ${label}`)]);
   };
 
-  const configuredTools = () => pi.getActiveTools().filter((name) => name !== "plan_complete");
-
   const goalIsActive = () =>
     ((globalThis as Record<string, unknown>).__simplyGoal as { active?: boolean } | undefined)?.active === true;
 
@@ -115,9 +112,7 @@ export default function planMode(pi: ExtensionAPI) {
       ctx.ui.notify("Pause or finish the active goal before entering plan mode", "warning");
       return;
     }
-    if (!savedTools) savedTools = configuredTools();
     state = { mode: "plan", plan: preservePlan ? state.plan : "" };
-    pi.setActiveTools(savedTools.filter((name) => READ_ONLY_TOOLS.has(name)));
     persist();
     updateUi(ctx);
     ctx.ui.notify("Plan mode: read-only exploration", "info");
@@ -132,10 +127,7 @@ export default function planMode(pi: ExtensionAPI) {
       ctx.ui.notify("No captured plan yet. Finish a planning turn first.", "warning");
       return false;
     }
-    const baseline = savedTools ?? configuredTools();
-    savedTools = baseline;
     state.mode = "execute";
-    pi.setActiveTools([...new Set([...baseline, "plan_complete"])]);
     persist();
     updateUi(ctx);
     ctx.ui.notify("Execute mode: tools restored", "info");
@@ -144,9 +136,6 @@ export default function planMode(pi: ExtensionAPI) {
 
   const enterOff = (ctx: ExtensionContext, message = "Plan mode off") => {
     state.mode = "off";
-    const baseline = savedTools ?? configuredTools();
-    pi.setActiveTools(baseline.filter((name) => name !== "plan_complete"));
-    savedTools = undefined;
     persist();
     updateUi(ctx);
     ctx.ui.notify(message, "info");
@@ -170,29 +159,18 @@ export default function planMode(pi: ExtensionAPI) {
 
   pi.on("session_start", (event, ctx) => {
     restore(ctx);
-    savedTools = configuredTools();
-
     if (event.reason === "startup" && pi.getFlag("plan") === true) {
       enterPlan(ctx, false);
       return;
-    }
-    if (state.mode === "plan") {
-      pi.setActiveTools(savedTools.filter((name) => READ_ONLY_TOOLS.has(name)));
-    } else if (state.mode === "execute") {
-      pi.setActiveTools([...new Set([...savedTools, "plan_complete"])]);
-    } else {
-      pi.setActiveTools(savedTools);
-      savedTools = undefined;
     }
     updateUi(ctx);
   });
 
   pi.on("before_agent_start", (event) => {
     if (state.mode === "plan") {
-      const previous = state.plan
-        ? `\n\nA previous draft exists. Revise it only when the user's latest request asks for refinement:\n\n<previous_plan>\n${state.plan}\n</previous_plan>`
-        : "";
-      return { systemPrompt: `${event.systemPrompt}\n\n${PLAN_PROMPT}${previous}` };
+      // The previous draft already exists in the conversation. Keeping it out
+      // of the system prompt preserves a stable provider-cache prefix.
+      return { systemPrompt: `${event.systemPrompt}\n\n${PLAN_PROMPT}` };
     }
     if (state.mode === "execute") {
       return { systemPrompt: `${event.systemPrompt}\n\n${executePrompt(state.plan)}` };
@@ -203,10 +181,18 @@ export default function planMode(pi: ExtensionAPI) {
     if (event.toolName === "plan_complete" && state.mode !== "execute") {
       return { block: true, reason: "plan_complete is only allowed in execute mode" };
     }
-    if (state.mode !== "plan" || event.toolName !== "bash") return;
-    const command = String((event.input as { command?: unknown }).command ?? "");
-    if (!isSafeBash(command)) {
-      return { block: true, reason: `Plan mode blocked a non-read-only command: ${command}` };
+    if (state.mode !== "plan") return;
+    if (!READ_ONLY_TOOLS.has(event.toolName)) {
+      return {
+        block: true,
+        reason: `Plan mode blocked non-read-only tool: ${event.toolName}`,
+      };
+    }
+    if (event.toolName === "bash") {
+      const command = String((event.input as { command?: unknown }).command ?? "");
+      if (!isSafeBash(command)) {
+        return { block: true, reason: `Plan mode blocked a non-read-only command: ${command}` };
+      }
     }
   });
 
@@ -222,17 +208,6 @@ export default function planMode(pi: ExtensionAPI) {
 
   pi.on("session_tree", (_event, ctx) => {
     restore(ctx);
-    if (state.mode === "plan") {
-      if (!savedTools) savedTools = configuredTools();
-      pi.setActiveTools(savedTools.filter((name) => READ_ONLY_TOOLS.has(name)));
-    } else if (state.mode === "execute") {
-      if (!savedTools) savedTools = configuredTools();
-      pi.setActiveTools([...new Set([...savedTools, "plan_complete"])]);
-    } else {
-      const baseline = savedTools ?? configuredTools();
-      pi.setActiveTools(baseline.filter((name) => name !== "plan_complete"));
-      savedTools = undefined;
-    }
     updateUi(ctx);
   });
 

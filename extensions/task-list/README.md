@@ -40,6 +40,8 @@ and then hides automatically without clearing the persisted task state. Running
 ```
 
 The model-facing tool supports `set`, `add`, `update`, `list`, and `clear`.
+Mutation results return a compact progress summary instead of repeating every
+task into model context; `list` returns the full text only when needed.
 
 ## Try without installing
 
