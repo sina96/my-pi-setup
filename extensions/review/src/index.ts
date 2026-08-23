@@ -1,6 +1,6 @@
 // Adapted and substantially rewritten from mitsuhiko/agent-stuff's review.ts.
 // Local changes: single-turn reviews, strict read-only tools, no checkout/branching/fix loops.
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, lstatSync, readFileSync } from "node:fs";
 import { relative, resolve } from "node:path";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 
@@ -103,11 +103,45 @@ function prNumber(value: string): number | undefined {
   return Number.isInteger(number) && number > 0 ? number : undefined;
 }
 
+export async function loadReviewGuidelines(
+  path: string,
+  ctx: Pick<ExtensionContext, "hasUI" | "isProjectTrusted" | "ui">,
+): Promise<string> {
+  let metadata: ReturnType<typeof lstatSync>;
+  try {
+    metadata = lstatSync(path);
+  } catch {
+    return "";
+  }
+  if (metadata.isSymbolicLink() || !metadata.isFile()) {
+    ctx.ui.notify("Ignored REVIEW_GUIDELINES.md because it is not a regular, non-symlinked file", "warning");
+    return "";
+  }
+  if (!ctx.isProjectTrusted()) {
+    ctx.ui.notify("Ignored REVIEW_GUIDELINES.md because the project is not trusted", "warning");
+    return "";
+  }
+  if (!ctx.hasUI || !await ctx.ui.confirm(
+    "Use project review guidelines?",
+    "REVIEW_GUIDELINES.md is untrusted project text that will be added to the review prompt.",
+  )) return "";
+
+  try {
+    // Recheck immediately before reading to reject a path replaced by a symlink
+    // while the confirmation dialog was open.
+    const current = lstatSync(path);
+    if (current.isSymbolicLink() || !current.isFile()) return "";
+    return readFileSync(path, "utf8").trim();
+  } catch {
+    return "";
+  }
+}
+
 export default function review(pi: ExtensionAPI) {
   let active = false;
   let scope = "";
   let reviewCwd = process.cwd();
-  let savedTools: string[] | undefined;
+  let reviewGuidelines = "";
 
   const exec = async (command: string, args: string[]) => {
     const result = await pi.exec(command, args);
@@ -253,10 +287,9 @@ export default function review(pi: ExtensionAPI) {
     active = false;
     scope = "";
     reviewCwd = process.cwd();
-    if (savedTools) pi.setActiveTools(savedTools);
-    savedTools = undefined;
+    reviewGuidelines = "";
     updateUi(ctx);
-    if (notify) ctx.ui.notify("Review mode off; previous tools restored", "info");
+    if (notify) ctx.ui.notify("Review mode off", "info");
   }
 
   async function start(target: ReviewTarget, focus: string | undefined, ctx: ExtensionContext): Promise<void> {
@@ -269,13 +302,14 @@ export default function review(pi: ExtensionAPI) {
       ctx.ui.notify(conflict === "goal" ? "Pause or finish the active goal before reviewing" : "Exit plan/execute mode before reviewing", "warning");
       return;
     }
-    savedTools = pi.getActiveTools().filter((name) => name !== "plan_complete");
-    const reviewTools = savedTools.filter((name) => REVIEW_TOOLS.has(name));
     active = true;
     reviewCwd = ctx.cwd;
+    reviewGuidelines = await loadReviewGuidelines(
+      resolve(reviewCwd, "REVIEW_GUIDELINES.md"),
+      ctx,
+    );
     scope = targetScope(target);
     if (focus) scope += `\n\nAdditional focus requested by the user: ${focus}`;
-    pi.setActiveTools(reviewTools);
     updateUi(ctx);
     ctx.ui.notify("Starting read-only code review", "info");
     try {
@@ -288,23 +322,26 @@ export default function review(pi: ExtensionAPI) {
 
   pi.on("before_agent_start", (event) => {
     if (!active) return;
-    let guidelines = "";
-    const path = resolve(reviewCwd, "REVIEW_GUIDELINES.md");
-    if (existsSync(path)) {
-      try {
-        const text = readFileSync(path, "utf8").trim();
-        if (text) guidelines = `\n\nProject review guidelines:\n${text}`;
-      } catch {
-        // The review can proceed with the built-in rubric if this optional file is unreadable.
-      }
-    }
+    const guidelines = reviewGuidelines
+      ? `\n\nProject review guidelines:\n${reviewGuidelines}`
+      : "";
     return { systemPrompt: `${event.systemPrompt}\n\n${REVIEW_RUBRIC}\n\nReview scope:\n${scope}${guidelines}` };
   });
 
   pi.on("tool_call", (event) => {
-    if (!active || event.toolName !== "bash") return;
-    const command = String((event.input as { command?: unknown }).command ?? "");
-    if (!safeReviewBash(command)) return { block: true, reason: `[review] Non-read-only command blocked: ${command}` };
+    if (!active) return;
+    if (!REVIEW_TOOLS.has(event.toolName)) {
+      return {
+        block: true,
+        reason: `[review] Non-read-only tool blocked: ${event.toolName}`,
+      };
+    }
+    if (event.toolName === "bash") {
+      const command = String((event.input as { command?: unknown }).command ?? "");
+      if (!safeReviewBash(command)) {
+        return { block: true, reason: `[review] Non-read-only command blocked: ${command}` };
+      }
+    }
   });
 
   pi.on("agent_end", (_event, ctx) => {
@@ -313,7 +350,7 @@ export default function review(pi: ExtensionAPI) {
 
   pi.on("session_start", (_event, ctx) => {
     active = false;
-    savedTools = undefined;
+    reviewGuidelines = "";
     updateUi(ctx);
   });
 

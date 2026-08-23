@@ -19,14 +19,29 @@ const number = (value: unknown): number => {
   return Number.isFinite(parsed) ? parsed : 0;
 };
 
+export function usageParts(usage: any): Omit<UsageTotals, "cost"> {
+  const input = number(usage?.input ?? usage?.inputTokens ?? usage?.input_tokens ?? usage?.promptTokens ?? usage?.prompt_tokens);
+  const output = number(usage?.output ?? usage?.outputTokens ?? usage?.output_tokens ?? usage?.completionTokens ?? usage?.completion_tokens);
+  const cacheRead = number(usage?.cacheRead ?? usage?.cache_read ?? usage?.cacheReadTokens);
+  const cacheWrite = number(usage?.cacheWrite ?? usage?.cache_write ?? usage?.cacheWriteTokens);
+  const reasoning = number(usage?.reasoning ?? usage?.reasoningTokens ?? usage?.reasoning_tokens);
+  const reportedTotal = usage?.totalTokens ?? usage?.total_tokens ?? usage?.tokens?.total ?? usage?.tokens;
+  const tokens = typeof reportedTotal === "number" &&
+      Number.isFinite(reportedTotal) && reportedTotal >= 0
+    ? reportedTotal
+    : input + output + cacheRead + cacheWrite;
+  return { input, output, cacheRead, cacheWrite, reasoning, tokens };
+}
+
 function addUsage(target: UsageTotals, usage: any): void {
   if (!usage) return;
-  target.input += number(usage.input ?? usage.inputTokens ?? usage.input_tokens ?? usage.promptTokens ?? usage.prompt_tokens);
-  target.output += number(usage.output ?? usage.outputTokens ?? usage.output_tokens ?? usage.completionTokens ?? usage.completion_tokens);
-  target.cacheRead += number(usage.cacheRead ?? usage.cache_read ?? usage.cacheReadTokens);
-  target.cacheWrite += number(usage.cacheWrite ?? usage.cache_write ?? usage.cacheWriteTokens);
-  target.reasoning += number(usage.reasoning ?? usage.reasoningTokens ?? usage.reasoning_tokens);
-  target.tokens += number(usage.totalTokens ?? usage.total_tokens ?? usage.tokens?.total ?? usage.tokens);
+  const parts = usageParts(usage);
+  target.input += parts.input;
+  target.output += parts.output;
+  target.cacheRead += parts.cacheRead;
+  target.cacheWrite += parts.cacheWrite;
+  target.reasoning += parts.reasoning;
+  target.tokens += parts.tokens;
   target.cost += number(usage.cost?.total ?? usage.cost);
 }
 
@@ -121,7 +136,7 @@ async function parseSession(path: string, signal?: AbortSignal): Promise<Session
       currentModel = model;
       const row = record.models.get(model) ?? { name: model, sessions: 0, turns: 0, calls: 0, tokens: 0, cost: 0 };
       row.turns += 1;
-      row.tokens += number(usage?.totalTokens ?? usage?.total_tokens ?? usage?.tokens?.total);
+      row.tokens += usageParts(usage).tokens;
       row.cost += number(usage?.cost?.total ?? usage?.cost);
       record.models.set(model, row);
     }

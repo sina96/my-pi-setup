@@ -296,8 +296,12 @@ function describeManager(label: string, manager: EffectiveManager<string>): stri
   return `${label}: ${manager.manager} (${manager.source})`;
 }
 
-async function policySummary(state: PolicyState, ctx: Pick<ExtensionContext, "cwd">): Promise<string> {
-  const policy = resolvePolicy(state, await detectProjectManagers(ctx.cwd));
+async function policySummary(
+  state: PolicyState,
+  ctx: Pick<ExtensionContext, "cwd">,
+  detected?: ProjectManagers,
+): Promise<string> {
+  const policy = resolvePolicy(state, detected ?? await detectProjectManagers(ctx.cwd));
   return [
     `Package-manager policy: ${policy.mode}`,
     describeManager("Node", policy.node),
@@ -308,15 +312,30 @@ async function policySummary(state: PolicyState, ctx: Pick<ExtensionContext, "cw
 
 export default function packageManagerPolicy(pi: ExtensionAPI): void {
   let state = { ...DEFAULT_STATE };
+  let detectedCwd: string | undefined;
+  let detectedManagers: Promise<ProjectManagers> | undefined;
   const restore = (ctx: ExtensionContext) => { state = restorePolicyState(ctx); };
+  const detect = (cwd: string, refresh = false): Promise<ProjectManagers> => {
+    const resolved = resolve(cwd);
+    if (refresh || resolved !== detectedCwd || !detectedManagers) {
+      detectedCwd = resolved;
+      detectedManagers = detectProjectManagers(resolved);
+    }
+    return detectedManagers;
+  };
 
-  pi.on("session_start", (_event, ctx) => restore(ctx));
+  pi.on("session_start", (_event, ctx) => {
+    detectedCwd = undefined;
+    detectedManagers = undefined;
+    restore(ctx);
+    void detect(ctx.cwd);
+  });
   pi.on("session_tree", (_event, ctx) => restore(ctx));
   pi.on("session_compact", (_event, ctx) => restore(ctx));
 
   pi.on("before_agent_start", async (event, ctx) => {
     if (state.mode === "off") return;
-    const policy = resolvePolicy(state, await detectProjectManagers(ctx.cwd));
+    const policy = resolvePolicy(state, await detect(ctx.cwd));
     const guidance = [
       "Package-manager policy:",
       `- ${describeManager("Node", policy.node)}`,
@@ -332,7 +351,7 @@ export default function packageManagerPolicy(pi: ExtensionAPI): void {
     if (event.toolName !== "bash" || state.mode === "off") return;
     const input = event.input as { command?: unknown };
     if (typeof input.command !== "string") return;
-    const policy = resolvePolicy(state, await detectProjectManagers(ctx.cwd));
+    const policy = resolvePolicy(state, await detect(ctx.cwd));
     const violation = findManagerViolation(input.command, policy);
     if (!violation) return;
     const message = `[package-manager-policy] Blocked ${violation.attempted}. ${violation.reason}`;
@@ -354,7 +373,7 @@ export default function packageManagerPolicy(pi: ExtensionAPI): void {
       const values = [
         "node auto", "node pnpm", "node npm", "node yarn", "node bun",
         "python auto", "python uv", "python poetry", "python pipenv", "python pip", "python pip3",
-        "mode enforce", "mode warn", "mode off", "reset",
+        "mode enforce", "mode warn", "mode off", "refresh", "reset",
       ];
       const normalized = prefix.trim().toLowerCase();
       const matches = values.filter((value) => value.startsWith(normalized));
@@ -363,7 +382,14 @@ export default function packageManagerPolicy(pi: ExtensionAPI): void {
     handler: async (args, ctx: ExtensionCommandContext) => {
       const words = args.trim().toLowerCase().split(/\s+/).filter(Boolean);
       if (words.length === 0) {
-        ctx.ui.notify(await policySummary(state, ctx), "info");
+        ctx.ui.notify(await policySummary(state, ctx, await detect(ctx.cwd)), "info");
+        return;
+      }
+      if (words.length === 1 && words[0] === "refresh") {
+        ctx.ui.notify(
+          await policySummary(state, ctx, await detect(ctx.cwd, true)),
+          "info",
+        );
         return;
       }
       if (words.length === 1 && words[0] === "reset") {
@@ -375,10 +401,13 @@ export default function packageManagerPolicy(pi: ExtensionAPI): void {
       } else if (words.length === 2 && words[0] === "mode" && ["enforce", "warn", "off"].includes(words[1])) {
         persist({ ...state, mode: words[1] as PolicyMode });
       } else {
-        ctx.ui.notify("Usage: /package-manager [node MANAGER | python MANAGER | mode enforce|warn|off | reset]", "warning");
+        ctx.ui.notify("Usage: /package-manager [node MANAGER | python MANAGER | mode enforce|warn|off | refresh | reset]", "warning");
         return;
       }
-      ctx.ui.notify(await policySummary(state, ctx), "info");
+      ctx.ui.notify(
+        await policySummary(state, ctx, await detect(ctx.cwd)),
+        "info",
+      );
     },
   });
 }

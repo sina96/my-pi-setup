@@ -55,10 +55,15 @@ state change. Ordinary difficulty or incomplete work remains active.
 - PLAN/EXECUTE and REVIEW modes refuse to overlap with an active goal; pause the
   goal first.
 - Hidden continuation messages are deduplicated from model context.
+- Goal instructions stay byte-stable across automatic turns so provider prompt
+  caches are not invalidated by changing turn counters.
+- Continuations tell the agent to reuse existing evidence and inspect only state
+  that may be missing or changed, rather than rereading the codebase by default.
 - The objective is escaped and explicitly treated as untrusted user data.
 
-Token totals are provider-reported processed tokens and can include cached input.
-The turn limit—not token accounting—is the hard runaway safeguard.
+Token totals are provider-reported processed tokens. Cache-read and cache-write
+tokens are tracked separately so reuse remains visible. The turn limit—not token
+accounting—is the hard runaway safeguard.
 
 ## When to use this instead of GLLA
 

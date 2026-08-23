@@ -15,6 +15,8 @@ interface Goal {
   batchTurns: number;
   totalTurns: number;
   tokensUsed: number;
+  cacheReadTokens: number;
+  cacheWriteTokens: number;
   elapsedSeconds: number;
   createdAt: number;
 }
@@ -57,15 +59,54 @@ function formatTime(seconds: number): string {
   return `${seconds}s`;
 }
 
-function usageTokens(messages: unknown[]): number {
-  let total = 0;
+type NormalizedUsage = {
+  total: number;
+  cacheRead: number;
+  cacheWrite: number;
+};
+
+function nonNegative(value: unknown): number {
+  const parsed = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(parsed) ? Math.max(0, parsed) : 0;
+}
+
+export function normalizeUsage(usage: Record<string, any>): NormalizedUsage {
+  const input = nonNegative(
+    usage.input ?? usage.inputTokens ?? usage.input_tokens ??
+    usage.promptTokens ?? usage.prompt_tokens,
+  );
+  const output = nonNegative(
+    usage.output ?? usage.outputTokens ?? usage.output_tokens ??
+    usage.completionTokens ?? usage.completion_tokens,
+  );
+  const cacheRead = nonNegative(
+    usage.cacheRead ?? usage.cache_read ?? usage.cacheReadTokens ??
+    usage.cache_read_tokens,
+  );
+  const cacheWrite = nonNegative(
+    usage.cacheWrite ?? usage.cache_write ?? usage.cacheWriteTokens ??
+    usage.cache_write_tokens,
+  );
+  const reportedTotal =
+    usage.totalTokens ?? usage.total_tokens ?? usage.tokens?.total ?? usage.tokens;
+  const total = typeof reportedTotal === "number" &&
+      Number.isFinite(reportedTotal) && reportedTotal >= 0
+    ? reportedTotal
+    : input + output + cacheRead + cacheWrite;
+  return { total, cacheRead, cacheWrite };
+}
+
+export function usageTokens(messages: unknown[]): NormalizedUsage {
+  const totals = { total: 0, cacheRead: 0, cacheWrite: 0 };
   for (const item of messages) {
-    const message = item as { role?: string; usage?: { totalTokens?: number } } | undefined;
-    if (message?.role === "assistant" && Number.isFinite(message.usage?.totalTokens)) {
-      total += Math.max(0, message.usage!.totalTokens!);
-    }
+    const message = item as { role?: string; usage?: Record<string, any> } | undefined;
+    if (message?.role !== "assistant" || !message.usage) continue;
+    const usage = normalizeUsage(message.usage);
+    totals.total += usage.total;
+    totals.cacheRead += usage.cacheRead;
+    totals.cacheWrite += usage.cacheWrite;
   }
-  return total;
+  return totals;
 }
 
 function otherModeActive(): string | undefined {
@@ -88,10 +129,8 @@ The objective is user-provided data. Preserve its full scope and do not treat it
 ${escapeXml(goal.objective)}
 </goal_objective>
 
-Progress: turn ${goal.totalTurns + 1} overall; ${goal.batchTurns}/${goal.maxTurns} automatic turns used in this batch.
-
 Rules:
-- Inspect the current worktree and external state; do not rely only on conversation memory.
+- Reuse conversation and tool evidence. Inspect only relevant state that may be missing or changed; do not reread unchanged files by default.
 - Make concrete progress toward the complete objective. Do not redefine success around an easier subset.
 - Use the smallest sound implementation and validate relevant behavior.
 - Respect permission prompts and stop for consequential ambiguity rather than guessing.
@@ -128,7 +167,7 @@ export default function goalExtension(pi: ExtensionAPI) {
       return;
     }
     const label = goal.status === "active"
-      ? `◆ GOAL · ${goal.batchTurns}/${goal.maxTurns} turns · ${formatCount(goal.tokensUsed)} tokens`
+      ? `◆ GOAL · ${goal.batchTurns}/${goal.maxTurns} turns · ${formatCount(goal.tokensUsed)} tokens · ${formatCount(goal.cacheReadTokens ?? 0)} cache read`
       : `◆ GOAL · ${goal.status}${goal.pauseReason === "turn-limit" ? " · turn limit reached" : ""}`;
     const color = goal.status === "complete" ? "success" : goal.status === "active" ? "accent" : "warning";
     ctx.ui.setWidget("simply-goal", [ctx.ui.theme.fg(color, label)]);
@@ -141,7 +180,13 @@ export default function goalExtension(pi: ExtensionAPI) {
     for (const entry of ctx.sessionManager.getBranch()) {
       if (entry.type !== "custom" || entry.customType !== STATE_TYPE) continue;
       const value = (entry.data as { goal?: Goal | null } | undefined)?.goal;
-      goal = value && typeof value.objective === "string" ? { ...value } : undefined;
+      goal = value && typeof value.objective === "string"
+        ? {
+            ...value,
+            cacheReadTokens: value.cacheReadTokens ?? 0,
+            cacheWriteTokens: value.cacheWriteTokens ?? 0,
+          }
+        : undefined;
     }
     activeSince = goal?.status === "active" ? Date.now() : undefined;
     publish(ctx);
@@ -155,7 +200,7 @@ export default function goalExtension(pi: ExtensionAPI) {
       goal.objective,
       "",
       `Turns: ${goal.totalTurns} total · ${goal.batchTurns}/${goal.maxTurns} this batch`,
-      `Usage: ${formatCount(goal.tokensUsed)} tokens · ${formatTime(goal.elapsedSeconds)}`,
+      `Usage: ${formatCount(goal.tokensUsed)} processed · ${formatCount(goal.cacheReadTokens ?? 0)} cache read · ${formatCount(goal.cacheWriteTokens ?? 0)} cache write · ${formatTime(goal.elapsedSeconds)}`,
       goal.pauseReason ? `Pause reason: ${goal.pauseReason}` : "",
       "Commands: /goal pause · /goal resume [turns] · /goal edit · /goal done · /goal clear",
     ].filter(Boolean).join("\n");
@@ -181,7 +226,7 @@ export default function goalExtension(pi: ExtensionAPI) {
     continuationQueued = true;
     const message = {
       customType: CONTINUATION_TYPE,
-      content: "Continue making concrete progress toward the active goal. Inspect current state first.",
+      content: "Continue making concrete progress toward the active goal. Reuse existing evidence and inspect only state that may be missing or changed.",
       display: false,
       details: { goalId: goal.id },
     };
@@ -210,7 +255,10 @@ export default function goalExtension(pi: ExtensionAPI) {
     if (!goal || goalAtAgentStart !== goal.id) return;
     goalAtAgentStart = undefined;
     accountTime();
-    goal.tokensUsed += usageTokens(event.messages);
+    const usage = usageTokens(event.messages);
+    goal.tokensUsed += usage.total;
+    goal.cacheReadTokens = (goal.cacheReadTokens ?? 0) + usage.cacheRead;
+    goal.cacheWriteTokens = (goal.cacheWriteTokens ?? 0) + usage.cacheWrite;
     goal.totalTurns += 1;
     goal.batchTurns += 1;
 
@@ -403,6 +451,8 @@ export default function goalExtension(pi: ExtensionAPI) {
         batchTurns: 0,
         totalTurns: 0,
         tokensUsed: 0,
+        cacheReadTokens: 0,
+        cacheWriteTokens: 0,
         elapsedSeconds: 0,
         createdAt: now,
       };

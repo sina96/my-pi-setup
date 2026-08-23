@@ -250,12 +250,6 @@ export default function herdrSubagents(pi: ExtensionAPI): void {
     label: "Spawn Herdr Subagent",
     description:
       "Start an asynchronous Pi subagent in a dedicated Herdr tab. Returns immediately. Results are delivered automatically; do not poll, sleep, or invent a result while waiting. At most four runs may be active.",
-    promptSnippet:
-      "Delegate an independent task to an observable Pi agent in a Herdr tab",
-    promptGuidelines: [
-      "Use subagent_spawn for independent, self-contained work that can proceed concurrently.",
-      "After subagent_spawn returns, do not poll for completion or assume its result; continue independent work or end the turn because herdr-subagents delivers results automatically.",
-    ],
     parameters: spawnSchema,
     async execute(_id, params, _signal, _update, ctx) {
       requireEnabled();

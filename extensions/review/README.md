@@ -8,9 +8,9 @@ This version is tailored to this setup's safety and modularity preferences:
 - It **never checks out a branch or PR**.
 - It does not create session branches, run autonomous fix loops, or implement
   findings.
-- Review mode temporarily exposes only inspection tools.
+- Review mode keeps tool schemas stable for prompt caching and blocks calls to
+  anything except inspection tools.
 - `bash` receives a second conservative read-only allowlist.
-- The exact previously active tool set is restored when the review ends.
 - It refuses to overlap with local PLAN/EXECUTE mode.
 - GitHub PR review uses `gh pr view` and `gh pr diff` without touching the worktree.
 
@@ -27,7 +27,7 @@ This version is tailored to this setup's safety and modularity preferences:
 /review paths src test          Snapshot review of project paths
 /review pr 123                  GitHub PR without checkout
 /review status                  Show whether review mode is active
-/review off                     Abort review mode and restore tools
+/review off                     Abort review mode and clear its call gate
 ```
 
 Add one review-specific focus after ` -- `:
@@ -43,10 +43,11 @@ repository.
 
 1. The extension validates the repository and target using argument-safe
    `pi.exec` calls rather than shell interpolation.
-2. It saves the currently active tools and switches to known inspection tools.
+2. It leaves the tool prefix stable and enforces known inspection tools at the
+   `tool_call` gate.
 3. A themed `REVIEW · read-only` widget appears.
 4. The agent receives a concise review rubric and target-specific instructions.
-5. On `agent_end`, previous tools are restored automatically.
+5. On `agent_end`, review mode and its read-only call gate are cleared.
 
 This is intentionally a single review turn in the current session. There is no
 `/end-review`, hidden branch navigation, or automatic fix pass. If findings should
@@ -66,8 +67,9 @@ The rubric requires:
 It excludes speculative issues, ordinary style feedback, and pre-existing bugs in
 diff-based reviews.
 
-If `REVIEW_GUIDELINES.md` exists at the current working directory, its contents
-are appended to the system review instructions.
+If `REVIEW_GUIDELINES.md` exists at the current working directory, it is used
+only when the project is trusted, the path is a regular non-symlinked file, and
+the user explicitly confirms adding its untrusted text to the review prompt.
 
 ## Safety notes
 

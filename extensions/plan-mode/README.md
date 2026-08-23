@@ -10,8 +10,7 @@ menus, and multi-plan management. It keeps the core safety workflow:
 2. Let the agent inspect the project and produce a self-contained `## Plan`.
 3. Review or refine the captured plan.
 4. Explicitly enter EXECUTE mode.
-5. The agent restores normal tools, implements the plan, validates it, and calls
-   `plan_complete`.
+5. The agent implements the plan, validates it, and calls `plan_complete`.
 
 ## Commands
 
@@ -19,7 +18,7 @@ menus, and multi-plan management. It keeps the core safety workflow:
 /plan             Toggle PLAN on, or turn the current mode off
 /plan on          Start a fresh planning pass
 /plan execute     Execute the most recently captured plan
-/plan off         Restore normal tools
+/plan off         Exit the current plan workflow
 /plan status      Show mode and whether a plan was captured
 ```
 
@@ -33,18 +32,18 @@ pi --plan
 
 ## Safety
 
-PLAN mode saves the currently active tool list and exposes only known read-only
-search/research tools. It keeps `bash` for inspection but permits a conservative
-allowlist such as `git status`, `git diff`, `ls`, `fd`, and `rg`. Shell redirects,
-command substitution, mutating commands, and execution flags are blocked.
+PLAN mode keeps the active tool schema stable for provider prompt caching, but
+blocks every call except known read-only search/research tools. It permits `bash`
+only through a conservative allowlist such as `git status`, `git diff`, `ls`,
+`fd`, and `rg`. Shell redirects, command substitution, mutating commands, and
+execution flags are blocked.
 
 This is a convenience boundary, not an operating-system sandbox. A hostile or
 unexpected external command could still have side effects; use a real sandbox for
 untrusted repositories.
 
-EXECUTE mode restores exactly the tool set that was active before PLAN mode and
-adds `plan_complete`. Outside EXECUTE mode, `plan_complete` is inactive and
-blocked.
+`plan_complete` stays registered so mode transitions do not invalidate the tool
+prefix. Outside EXECUTE mode, calls to it are blocked.
 
 ## Persistence
 
