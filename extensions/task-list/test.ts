@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import taskListExtension, {
   COMPLETED_HIDE_DELAY_MS,
+  compactResultLine,
   restoreTaskState,
   type TaskStatus,
   widgetLines,
@@ -95,12 +96,82 @@ test("widget keeps an active task beyond the normal row budget visible", () => {
   assert.equal(lines.every((line) => line.length <= 80), true);
 });
 
+test("compact tool results retain only the task summary", () => {
+  assert.equal(compactResultLine({ tasks: [] }), "Task list · cleared");
+  assert.equal(
+    compactResultLine({
+      tasks: [
+        { id: 1, text: "Inspect", status: "completed" },
+        { id: 2, text: "Implement", status: "in_progress" },
+      ],
+    }),
+    "Task list · 1/2 complete · #2 active",
+  );
+});
+
 test("/tasks clear persists the empty state and removes the widget", async () => {
   const h = harness();
   await execute(h, { action: "set", tasks: ["One"] });
   await h.commands.get("tasks").handler("clear", h.ctx);
   assert.equal(h.entries[0]?.[0], "simply-task-list-state");
   assert.deepEqual((h.entries[0]?.[1] as any).tasks, []);
+  assert.equal(h.widgets.at(-1)?.[1], undefined);
+});
+
+test("completed snapshots resume with only their remaining hide delay", () => {
+  const originalNow = Date.now;
+  const originalSetTimeout = globalThis.setTimeout;
+  let delay: number | undefined;
+  Date.now = () => 1_000;
+  globalThis.setTimeout = ((callback: (...args: any[]) => void, value?: number) => {
+    delay = value;
+    return { unref() {} } as ReturnType<typeof setTimeout>;
+  }) as typeof setTimeout;
+
+  try {
+    const h = harness([
+      {
+        type: "message",
+        message: {
+          role: "toolResult",
+          toolName: "task_list",
+          details: {
+            version: 1,
+            action: "update",
+            tasks: [{ id: 1, text: "Done", status: "completed" }],
+            nextId: 2,
+            completedHideAt: 1_500,
+          },
+        },
+      },
+    ]);
+    h.handlers.get("session_start")?.[0]({}, h.ctx);
+    assert.equal(delay, 500);
+  } finally {
+    Date.now = originalNow;
+    globalThis.setTimeout = originalSetTimeout;
+  }
+});
+
+test("completed snapshots hide immediately after their persisted deadline on resume", () => {
+  const h = harness([
+    {
+      type: "message",
+      message: {
+        role: "toolResult",
+        toolName: "task_list",
+        details: {
+          version: 1,
+          action: "update",
+          tasks: [{ id: 1, text: "Done", status: "completed" }],
+          nextId: 2,
+          completedHideAt: Date.now() - 1,
+        },
+      },
+    },
+  ]);
+
+  h.handlers.get("session_start")?.[0]({}, h.ctx);
   assert.equal(h.widgets.at(-1)?.[1], undefined);
 });
 

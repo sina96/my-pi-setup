@@ -72,7 +72,8 @@
     "thinkingLow": "accent",
     "thinkingMedium": "accent2",
     "thinkingHigh": "purple",
-    "thinkingXhigh": "red",
+    "thinkingXhigh": "orange",
+    "thinkingMax": "red",
     "bashMode": "green"
   },
   "export": {

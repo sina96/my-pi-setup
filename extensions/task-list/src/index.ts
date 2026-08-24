@@ -1,6 +1,6 @@
 import { StringEnum } from "@earendil-works/pi-ai";
 import type { ExtensionAPI, ExtensionContext, Theme } from "@earendil-works/pi-coding-agent";
-import { truncateToWidth } from "@earendil-works/pi-tui";
+import { Text, truncateToWidth } from "@earendil-works/pi-tui";
 import { Type, type Static } from "typebox";
 
 export type TaskStatus = "pending" | "in_progress" | "completed";
@@ -16,6 +16,8 @@ export interface TaskListDetails {
   action: "set" | "add" | "update" | "list" | "clear";
   tasks: TaskItem[];
   nextId: number;
+  /** Absolute time when an all-completed widget should disappear. */
+  completedHideAt?: number;
 }
 
 const TOOL_NAME = "task_list";
@@ -67,9 +69,11 @@ function isTaskStatus(value: unknown): value is TaskStatus {
 export function restoreTaskState(ctx: Pick<ExtensionContext, "sessionManager">): {
   tasks: TaskItem[];
   nextId: number;
+  completedHideAt?: number;
 } {
   let tasks: TaskItem[] = [];
   let nextId = 1;
+  let completedHideAt: number | undefined;
 
   for (const entry of ctx.sessionManager.getBranch()) {
     let details: Partial<TaskListDetails> | undefined;
@@ -101,10 +105,18 @@ export function restoreTaskState(ctx: Pick<ExtensionContext, "sessionManager">):
     if (valid) {
       tasks = restored;
       nextId = details.nextId!;
+      completedHideAt = typeof details.completedHideAt === "number" && Number.isFinite(details.completedHideAt)
+        ? details.completedHideAt
+        : undefined;
     }
   }
 
-  return { tasks, nextId };
+  // Older completed snapshots did not persist a deadline. Their intended
+  // one-minute lifetime has already elapsed by the time they are restored.
+  if (tasks.length > 0 && tasks.every((task) => task.status === "completed") && completedHideAt === undefined) {
+    completedHideAt = 0;
+  }
+  return completedHideAt === undefined ? { tasks, nextId } : { tasks, nextId, completedHideAt };
 }
 
 function glyph(status: TaskStatus): string {
@@ -127,6 +139,14 @@ function compactState(tasks: readonly TaskItem[]): string {
   const done = tasks.filter((task) => task.status === "completed").length;
   const active = tasks.find((task) => task.status === "in_progress");
   return `Tasks: ${done}/${tasks.length} complete${active ? `; active \`#${active.id}\`` : "; none active"}. Use action=list only when the full list is needed.`;
+}
+
+export function compactResultLine(details: Partial<TaskListDetails> | undefined): string {
+  const tasks = details?.tasks;
+  if (!tasks || tasks.length === 0) return "Task list · cleared";
+  const done = tasks.filter((task) => task.status === "completed").length;
+  const active = tasks.find((task) => task.status === "in_progress");
+  return `Task list · ${done}/${tasks.length} complete${active ? ` · #${active.id} active` : ""}`;
 }
 
 function themedTask(theme: Theme, task: TaskItem): string {
@@ -168,11 +188,24 @@ export function widgetLines(theme: Theme, tasks: readonly TaskItem[], width: num
 export default function taskListExtension(pi: ExtensionAPI): void {
   let tasks: TaskItem[] = [];
   let nextId = 1;
+  let completedHideAt: number | undefined;
   let widgetHidden = false;
   let hideTimer: ReturnType<typeof setTimeout> | undefined;
 
   function snapshot(action: TaskListDetails["action"]): TaskListDetails {
-    return { version: 1, action, tasks: cloneTasks(tasks), nextId };
+    return { version: 1, action, tasks: cloneTasks(tasks), nextId, completedHideAt };
+  }
+
+  function allCompleted(): boolean {
+    return tasks.length > 0 && tasks.every((task) => task.status === "completed");
+  }
+
+  function syncCompletedHideDeadline(reset = false): void {
+    if (!allCompleted()) {
+      completedHideAt = undefined;
+    } else if (reset || completedHideAt === undefined) {
+      completedHideAt = Date.now() + COMPLETED_HIDE_DELAY_MS;
+    }
   }
 
   function cancelHideTimer(): void {
@@ -180,8 +213,9 @@ export default function taskListExtension(pi: ExtensionAPI): void {
     hideTimer = undefined;
   }
 
-  function revealWidget(): void {
+  function revealWidget(resetCompletedTimer = false): void {
     cancelHideTimer();
+    if (resetCompletedTimer) syncCompletedHideDeadline(true);
     widgetHidden = false;
   }
 
@@ -191,6 +225,23 @@ export default function taskListExtension(pi: ExtensionAPI): void {
       ctx.ui.setWidget(WIDGET_KEY, undefined);
       return;
     }
+    if (allCompleted()) {
+      syncCompletedHideDeadline();
+      const remaining = (completedHideAt ?? 0) - Date.now();
+      if (remaining <= 0) {
+        widgetHidden = true;
+        ctx.ui.setWidget(WIDGET_KEY, undefined);
+        return;
+      }
+      if (hideTimer === undefined) {
+        hideTimer = setTimeout(() => {
+          hideTimer = undefined;
+          widgetHidden = true;
+          if (ctx.hasUI) ctx.ui.setWidget(WIDGET_KEY, undefined);
+        }, remaining);
+        (hideTimer as { unref?: () => void }).unref?.();
+      }
+    }
     ctx.ui.setWidget(
       WIDGET_KEY,
       (_tui, theme) => ({
@@ -199,20 +250,13 @@ export default function taskListExtension(pi: ExtensionAPI): void {
       }),
       { placement: "aboveEditor" },
     );
-    if (tasks.every((task) => task.status === "completed") && hideTimer === undefined) {
-      hideTimer = setTimeout(() => {
-        hideTimer = undefined;
-        widgetHidden = true;
-        if (ctx.hasUI) ctx.ui.setWidget(WIDGET_KEY, undefined);
-      }, COMPLETED_HIDE_DELAY_MS);
-      (hideTimer as { unref?: () => void }).unref?.();
-    }
   }
 
   function restore(ctx: ExtensionContext): void {
     const restored = restoreTaskState(ctx);
     tasks = restored.tasks;
     nextId = restored.nextId;
+    completedHideAt = restored.completedHideAt;
     revealWidget();
     publish(ctx);
   }
@@ -238,6 +282,13 @@ export default function taskListExtension(pi: ExtensionAPI): void {
       "Skip task_list for one-step fixes, quick answers, and purely conversational requests.",
     ],
     parameters: TaskListSchema,
+    renderCall(args, theme) {
+      return new Text(theme.fg("toolTitle", `Task list · ${args.action}`), 0, 0);
+    },
+    renderResult(result, _options, theme) {
+      if (result.isError) return new Text(theme.fg("error", "Task list update failed"), 0, 0);
+      return new Text(theme.fg("muted", compactResultLine(result.details as Partial<TaskListDetails> | undefined)), 0, 0);
+    },
 
     async execute(_toolCallId, params: TaskListInput, _signal, _onUpdate, ctx) {
       let message: string;
@@ -296,6 +347,7 @@ export default function taskListExtension(pi: ExtensionAPI): void {
         }
       }
 
+      syncCompletedHideDeadline();
       if (params.action !== "list") revealWidget();
       publish(ctx);
       const details = snapshot(params.action);
@@ -327,7 +379,8 @@ export default function taskListExtension(pi: ExtensionAPI): void {
         return;
       }
       ctx.ui.notify(plainList(tasks), "info");
-      revealWidget();
+      revealWidget(true);
+      pi.appendEntry(STATE_TYPE, snapshot("list"));
       publish(ctx);
     },
   });
