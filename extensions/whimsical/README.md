@@ -8,6 +8,12 @@ upstream collection. This version keeps a separate pool of fun, exploratory
 first-turn messages, uses the full collection for follow-up turns, and avoids
 immediate repeats.
 
+Follow-up messages also include original short verbs and longer phrases for
+1990s nostalgia, board games, astronauts, absurdity, coffee, AI, noir,
+gaming, Gen-Z, gym bro, hustle culture, food, chemistry, LinkedIn-speak,
+Marvel, Lord of the Rings, mathematics, medieval knights, retro gaming,
+NASA/space, and vibe checks.
+
 ```text
 /whimsy          Toggle for the current session branch
 /whimsy on       Enable

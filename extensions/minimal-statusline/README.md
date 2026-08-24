@@ -34,7 +34,13 @@ is stored in `~/.pi/agent/minimal-statusline.json`.
 
 ## Data and performance
 
-- Project name and Node runtime version are local process metadata.
+- Project name and Node runtime version are local process metadata. Balanced
+  mode also recognizes Node projects using npm, pnpm, Yarn, or Bun lockfiles.
+- It displays project-declared Go (`go.mod`), Java/Kotlin (`.java-version`,
+  asdf, Maven, or Gradle), Rust (toolchain/Cargo), and Python/uv
+  (`.python-version`, asdf, `pyproject.toml`, or `uv.lock`) versions when
+  available. For Maven and Gradle projects without a declared JVM version, it
+  runs `java -version` once at session start as a fallback.
 - Pi provides the watched Git branch, active model, thinking level, and context
   usage through its public extension API.
 - Costs and token totals cover assistant messages, nested model tool results,

@@ -1,6 +1,7 @@
 import type { AssistantMessage } from "@earendil-works/pi-ai";
 import { getAgentDir, type ExtensionAPI, type ExtensionContext, type Theme } from "@earendil-works/pi-coding-agent";
 import { truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
+import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
 
@@ -16,9 +17,15 @@ interface UsageTotals {
   cost: number;
 }
 
+export interface RuntimeVersion {
+  icon: string;
+  name: string;
+  version: string;
+}
+
 interface StatuslineSnapshot {
   project: string;
-  nodeVersion?: string;
+  runtimes: RuntimeVersion[];
   thinkingLevel: string;
   usage: UsageTotals;
 }
@@ -53,8 +60,66 @@ export function saveSettings(settings: StatuslineSettings, path = SETTINGS_PATH)
   writeFileSync(path, `${JSON.stringify(settings, null, 2)}\n`, "utf8");
 }
 
-function hasNodeProject(cwd: string): boolean {
-  return ["package.json", ".nvmrc", ".node-version"].some((file) => existsSync(join(cwd, file)));
+function readProjectFile(cwd: string, file: string): string | undefined {
+  try {
+    return readFileSync(join(cwd, file), "utf8");
+  } catch {
+    return undefined;
+  }
+}
+
+function firstMatch(text: string | undefined, pattern: RegExp): string | undefined {
+  return text?.match(pattern)?.[1]?.trim();
+}
+
+function currentJavaVersion(): string | undefined {
+  const result = spawnSync("java", ["-version"], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
+  if (result.error || result.status !== 0) return undefined;
+  const output = `${result.stdout}\n${result.stderr}`;
+  return firstMatch(output, /version ["']([^"']+)/) ?? firstMatch(output, /\b(?:openjdk|java)\s+(\d+(?:\.\d+)+|\d+)/i);
+}
+
+/** Detect project-declared toolchains, with Java falling back to the installed JVM. */
+export function detectRuntimeVersions(cwd: string, nodeVersion = process.version, installedJavaVersion?: string): RuntimeVersion[] {
+  const has = (files: string[]) => files.some((file) => existsSync(join(cwd, file)));
+  const runtimes: RuntimeVersion[] = [];
+
+  // Lockfiles count: npm, pnpm, Yarn, and Bun projects still run on Node.
+  if (has(["package.json", ".nvmrc", ".node-version", "package-lock.json", "npm-shrinkwrap.json", "pnpm-lock.yaml", "pnpm-workspace.yaml", "yarn.lock", "bun.lock", "bun.lockb"])) {
+    runtimes.push({ icon: "", name: "Node", version: nodeVersion });
+  }
+
+  const goVersion = firstMatch(readProjectFile(cwd, "go.mod"), /^go\s+([^\s]+)$/m);
+  if (goVersion) runtimes.push({ icon: "", name: "Go", version: goVersion });
+
+  const toolVersions = readProjectFile(cwd, ".tool-versions");
+  const gradle = `${readProjectFile(cwd, "build.gradle") ?? ""}\n${readProjectFile(cwd, "build.gradle.kts") ?? ""}`;
+  const declaredJavaVersion = readProjectFile(cwd, ".java-version")?.trim()
+    ?? firstMatch(toolVersions, /^java\s+([^\s]+)$/m)
+    ?? firstMatch(readProjectFile(cwd, "pom.xml"), /<maven\.compiler\.(?:release|target)>([^<]+)</)
+    ?? firstMatch(gradle, /JavaVersion\.VERSION_(\d+)/)
+    ?? firstMatch(gradle, /JavaLanguageVersion\.of\((\d+)\)/);
+  const isKotlin = has(["build.gradle.kts"]) || /\bkotlin(?:\(|\s*\{|\s*=)/.test(gradle);
+  const isJava = declaredJavaVersion !== undefined || has(["pom.xml", "build.gradle", "build.gradle.kts", "settings.gradle", "settings.gradle.kts"]);
+  const javaVersion = declaredJavaVersion ?? (isJava ? installedJavaVersion ?? currentJavaVersion() : undefined);
+  if (isJava && javaVersion) runtimes.push({ icon: isKotlin ? "" : "", name: isKotlin ? "Kotlin/JVM" : "Java", version: javaVersion });
+
+  const cargo = readProjectFile(cwd, "Cargo.toml");
+  const rustVersion = firstMatch(readProjectFile(cwd, "rust-toolchain"), /^\s*([^#\s]+)\s*$/m)
+    ?? firstMatch(readProjectFile(cwd, "rust-toolchain.toml"), /^channel\s*=\s*["']([^"']+)/m)
+    ?? firstMatch(cargo, /^rust-version\s*=\s*["']([^"']+)/m);
+  if (rustVersion && (cargo || has(["rust-toolchain", "rust-toolchain.toml"]))) runtimes.push({ icon: "", name: "Rust", version: rustVersion });
+
+  const pyproject = readProjectFile(cwd, "pyproject.toml");
+  const pythonVersion = readProjectFile(cwd, ".python-version")?.trim().split(/\s+/)[0]
+    ?? firstMatch(toolVersions, /^python\s+([^\s]+)$/m)
+    ?? firstMatch(pyproject, /^requires-python\s*=\s*["']([^"']+)/m)
+    ?? firstMatch(readProjectFile(cwd, "uv.lock"), /^requires-python\s*=\s*["']([^"']+)/m);
+  if (pythonVersion && (pyproject || has(["uv.lock", "requirements.txt", "requirements-dev.txt", "Pipfile", "poetry.lock", ".python-version"]))) {
+    runtimes.push({ icon: "", name: "Python", version: pythonVersion });
+  }
+
+  return runtimes;
 }
 
 function formatTokens(value: number): string {
@@ -104,8 +169,10 @@ function thinkingSegment(theme: Theme, level: string): string {
 function leftSegment(theme: Theme, snapshot: StatuslineSnapshot, branch: string | null, density: Density): string {
   const parts = [theme.bold(theme.fg("text", snapshot.project))];
   if (branch) parts.push(theme.fg("dim", "on ") + theme.fg("accent", ` ${branch}`));
-  if (density === "balanced" && snapshot.nodeVersion) {
-    parts.push(theme.fg("dim", "via ") + theme.fg("success", ` ${snapshot.nodeVersion}`));
+  if (density === "balanced") {
+    for (const runtime of snapshot.runtimes) {
+      parts.push(theme.fg("dim", "via ") + theme.fg("success", `${runtime.icon} ${runtime.version}`));
+    }
   }
   return parts.join(" ");
 }
@@ -154,6 +221,7 @@ export default function minimalStatusline(pi: ExtensionAPI): void {
   let settings = loadSettings();
   let snapshot: StatuslineSnapshot = {
     project: "pi",
+    runtimes: [],
     thinkingLevel: "off",
     usage: { input: 0, output: 0, cost: 0 },
   };
@@ -178,7 +246,7 @@ export default function minimalStatusline(pi: ExtensionAPI): void {
       let density: Density | undefined = isDensity(requested) ? requested : undefined;
       if (!requested && ctx.hasUI) {
         const selected = await ctx.ui.select("Statusline density", [
-          `balanced — project, Git, Node, provider, model, thinking, usage${settings.density === "balanced" ? " (current)" : ""}`,
+          `balanced — project, Git, project runtimes, provider, model, thinking, usage${settings.density === "balanced" ? " (current)" : ""}`,
           `minimal — project, Git, model, thinking, context, cost${settings.density === "minimal" ? " (current)" : ""}`,
         ]);
         density = selected?.startsWith("minimal") ? "minimal" : selected?.startsWith("balanced") ? "balanced" : undefined;
@@ -198,7 +266,7 @@ export default function minimalStatusline(pi: ExtensionAPI): void {
     settings = loadSettings();
     snapshot = {
       project: basename(ctx.cwd) || ctx.cwd,
-      nodeVersion: hasNodeProject(ctx.cwd) ? process.version : undefined,
+      runtimes: detectRuntimeVersions(ctx.cwd),
       thinkingLevel: pi.getThinkingLevel(),
       usage: summarizeUsage(ctx),
     };
