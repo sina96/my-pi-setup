@@ -89,6 +89,7 @@
 		"thinkingMedium": "blue",
 		"thinkingHigh": "magenta",
 		"thinkingXhigh": "red",
+		"thinkingMax": "brightRed",
 
 		"bashMode": "brightGreen"
 	},

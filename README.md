@@ -9,7 +9,6 @@ A modular, shareable [Pi](https://pi.dev) coding environment. Each customization
 ## Recommended tools to use with this setup
 - [Pi Coding Agent](https://pi.dev)
 - [Herdr](https://herdr.dev)
-- [Starship](https://starship.rs)
 - [Neovim](https://neovim.io)
 - [Zed](https://zed.dev)
 - Also recommend to add these stuff globally as well see **docs/almost-required-stuff**
@@ -40,7 +39,7 @@ I also use [pi-learning-workflow](https://github.com/sina96/pi-learning-workflow
 - [`session-insights`](extensions/session-insights/README.md) — Adds a tabbed Neovim-style `/usage` popup for session, token, cost, model, project, tool, and current-context insights.
 - [`simply-session-recall`](extensions/simply-session-recall/README.md) — Recalls selected past Pi sessions through `simply_find`/`simply_grep` discovery and focused model queries.
 - [`simply-file-search`](extensions/simply-file-search/README.md) — Registers fast `simply_find` and `simply_grep` tools backed by `fd`, `rg`, and optional fuzzy ranking through `fzf`.
-- [`starship-statusline`](extensions/starship-statusline/README.md) — Adds a configurable Starship-powered footer with model and Git information.
+- [`minimal-statusline`](extensions/minimal-statusline/README.md) — Adds a dependency-free native footer with project, Git, model, thinking, context, and cost information.
 - [`task-list`](extensions/task-list/README.md) — Gives the agent a session-persistent task list and visualizes pending, active, and completed work above the editor.
 - [`theme-picker`](extensions/theme-picker/README.md) — Adds `/theme` with fuzzy search, live preview, rollback on cancellation, and global theme persistence.
 - [`token-optimizer`](extensions/token-optimizer/README.md) — Adds default-off, session-scoped output, coding, and RTK token controls via `/tokens`, plus a one-shot `/brief` prompt.
