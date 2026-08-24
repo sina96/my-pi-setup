@@ -1,0 +1,17 @@
+{
+  "name": "minimal-statusline",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "A minimal native Pi footer with project, Git, model, thinking, context, and cost information",
+  "keywords": ["pi-package", "pi-extension", "statusline", "footer"],
+  "license": "MIT",
+  "peerDependencies": {
+    "@earendil-works/pi-ai": "*",
+    "@earendil-works/pi-coding-agent": "*",
+    "@earendil-works/pi-tui": "*"
+  },
+  "pi": {
+    "extensions": ["./src/index.ts"]
+  }
+}
