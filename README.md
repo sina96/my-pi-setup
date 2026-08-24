@@ -14,6 +14,8 @@ A modular, shareable [Pi](https://pi.dev) coding environment. Each customization
 - [Zed](https://zed.dev)
 - Also recommend to add these stuff globally as well see **docs/almost-required-stuff**
 
+I also use [pi-learning-workflow](https://github.com/sina96/pi-learning-workflow) package when i work with a "learn-to-do-it-yourself" mindset in a project. like learning to code etc.
+
 ## Directories
 
 - `assets/` — screenshots and supporting files
