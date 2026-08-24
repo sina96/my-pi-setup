@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/sina96/my-pi-setup/actions/workflows/ci.yml/badge.svg)](https://github.com/sina96/my-pi-setup/actions/workflows/ci.yml)
 
-![Screenshot](./assets/Pi-Setup-Screenshot-aug26.png)
+![demo](./assets/pi-hello.gif)
 
 A modular, shareable [Pi](https://pi.dev) coding environment. Each customization stays separate so it can be installed, removed, or adapted independently. Please do not hard-copy the setup unchanged—use it as a starting point and customize it for your own workflow.
 
