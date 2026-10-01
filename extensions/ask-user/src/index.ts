@@ -66,6 +66,7 @@ export default function askUser(pi: ExtensionAPI) {
     promptGuidelines: [
       "Use ask_user when requirements are ambiguous, multiple valid choices have meaningful trade-offs, or explicit approval is needed.",
       "Ask exactly one focused question per ask_user call; gather relevant evidence before asking.",
+      "After a successful answer, continue the active task without waiting for another user message. In an interview (or a grill me questionnaire), use the answer to ask the next relevant question with ask_user until the interview is complete or the user asks to stop. If the dialog is cancelled or unavailable, do not automatically ask again.",
       "Do not use ask_user for trivial choices that can be inferred safely from the user's request or project conventions.",
     ],
     parameters: AskUserSchema,

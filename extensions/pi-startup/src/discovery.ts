@@ -1,4 +1,4 @@
-import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
+import { getAgentDir, type ExtensionAPI, type ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
@@ -126,7 +126,7 @@ function countExtensions(pi: ExtensionAPI, cwd: string): number {
 export function countMcpServers(
   pi: ExtensionAPI,
   ctx: ExtensionContext,
-  agentDir = join(homedir(), ".pi", "agent"),
+  agentDir = getAgentDir(),
 ): number {
   const globalServers = readJson(join(agentDir, "mcp.json"))?.mcpServers;
   const servers = new Map<string, unknown>();

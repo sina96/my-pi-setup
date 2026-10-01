@@ -260,8 +260,14 @@ export default function goalExtension(pi: ExtensionAPI) {
     goal.cacheWriteTokens = (goal.cacheWriteTokens ?? 0) + usage.cacheWrite;
     goal.totalTurns += 1;
     goal.batchTurns += 1;
+    const lastAssistant = [...event.messages].reverse().find((message) => message.role === "assistant");
+    const aborted = lastAssistant?.stopReason === "aborted";
     persist();
     publish(ctx);
+    if (aborted && goal.status === "active") {
+      setStatus("paused", ctx, "aborted");
+      show(`Goal paused after the turn was aborted.\n\n${summary()}`);
+    }
   });
 
   pi.on("agent_before_settle", (event, ctx) => {

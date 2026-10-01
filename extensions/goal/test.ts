@@ -59,6 +59,28 @@ test("goal continues at agent_before_settle with a branch-local continuation", a
   assert.match(continuation.content, /Continue making concrete progress/);
 });
 
+test("goal pauses on cancellation in agent_end before final settlement", async () => {
+  const h = harness();
+  await h.commands.get("goal").handler("Implement the approved change", h.ctx);
+  h.handlers.get("agent_start")?.[0]({}, h.ctx);
+  h.handlers.get("agent_end")?.[0]({
+    messages: [{ role: "assistant", stopReason: "aborted", usage: { totalTokens: 1 } }],
+  }, h.ctx);
+
+  const state = h.entries.filter(([type]) => type === "simply-goal-state").at(-1)?.[1] as any;
+  assert.equal(state.goal.status, "paused");
+  assert.equal(state.goal.pauseReason, "aborted");
+
+  // Pi still emits the settle boundary after agent_end; it must not replace the cancellation reason.
+  h.handlers.get("agent_before_settle")?.[0]({
+    outcome: "aborted",
+    entries: [],
+    context: { pendingMessages: [] },
+  }, h.ctx);
+  const settledState = h.entries.filter(([type]) => type === "simply-goal-state").at(-1)?.[1] as any;
+  assert.equal(settledState.goal.pauseReason, "aborted");
+});
+
 test("goal pauses after final errors and leaves queued user work alone", async () => {
   const h = harness();
   await startGoal(h);
