@@ -29,7 +29,7 @@ function latestText(entries: SessionEntry[], role: "assistant" | "user"): string
   for (let index = entries.length - 1; index >= 0; index -= 1) {
     const entry = entries[index];
     if (entry.type !== "message" || entry.message.role !== role) continue;
-    if (role === "assistant" && entry.message.stopReason === "aborted" && entry.message.content.length === 0) continue;
+    if (entry.message.role === "assistant" && entry.message.stopReason === "aborted" && entry.message.content.length === 0) continue;
     const text = textContent(entry.message.content).trim();
     if (text) return text;
   }

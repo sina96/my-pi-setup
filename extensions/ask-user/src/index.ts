@@ -61,6 +61,7 @@ export default function askUser(pi: ExtensionAPI) {
     name: "ask_user",
     label: "Ask User",
     description: "Ask the user one focused question, optionally with up to eight choices and a freeform answer. Use this when requirements are ambiguous or a meaningful decision needs explicit user input.",
+    exposure: "model-only",
     promptSnippet: "Ask one focused question with optional choices and a freeform response",
     promptGuidelines: [
       "Use ask_user when requirements are ambiguous, multiple valid choices have meaningful trade-offs, or explicit approval is needed.",

@@ -47,6 +47,27 @@ Optional flags:
 - `--top-p <0.0-1.0>` — override nucleus sampling probability
 - `--json`
 
+## Compose with codemode
+
+When codemode is active, this helper can run through `tools.bash` with `--json`
+while independent local `simply_grep`, `simply_find`, or `read` calls run in the
+same `Promise.allSettled` batch. Skills are instructions, not registered tools:
+do not invent a `tools.native_web_search()` method.
+
+Resolve the helper's absolute path from this SKILL.md and shell-quote arguments.
+Check the bash exit code and truncation flag before parsing JSON. Preserve the
+result's full source URLs and verify consequential claims against primary sources.
+
+Run only **one helper process per batch**. OAuth refresh may rewrite shared
+`auth.json`; multiple web queries should be sequential to avoid credential-write
+races and unnecessary quota consumption. Do not transmit private local search
+results to the web helper without user approval. Its external model cost is not
+included in Pi's `bash` result usage/accounting.
+
+See [combined batching examples](../../docs/codemode-batching.md). The examples
+are workflow guidance, not a read-only security boundary; PLAN/review modes may
+block the helper's shell invocation.
+
 ## Output contract
 
 The research model is instructed to provide:

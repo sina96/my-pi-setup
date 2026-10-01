@@ -43,7 +43,9 @@ unexpected external command could still have side effects; use a real sandbox fo
 untrusted repositories.
 
 `plan_complete` stays registered so mode transitions do not invalidate the tool
-prefix. Outside EXECUTE mode, calls to it are blocked.
+prefix. It is model-only (not callable inside codemode scripts), and outside
+EXECUTE mode calls to it are blocked. The fixed read-only allowlist intentionally
+blocks codemode and MCP tools until each nested operation can be checked safely.
 
 ## Persistence
 

@@ -74,8 +74,6 @@ export default function themePicker(pi: ExtensionAPI) {
         overlayOptions: {
           anchor: "center",
           width: "92%",
-          minWidth: 70,
-          maxWidth: 120,
           maxHeight: "90%",
           margin: 1,
         },

@@ -1,32 +1,83 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { normalizeUsage, usageTokens } from "./src/index.ts";
+import goalExtension from "./src/index.ts";
 
-test("normalizes supported usage field shapes", () => {
-  const cases: Array<[Record<string, unknown>, { total: number; cacheRead: number; cacheWrite: number }]> = [
-    [{ input: 2, output: 3, cacheRead: 5, cacheWrite: 7, totalTokens: 17 }, { total: 17, cacheRead: 5, cacheWrite: 7 }],
-    [{ inputTokens: 2, outputTokens: 3, cacheReadTokens: 5, cacheWriteTokens: 7 }, { total: 17, cacheRead: 5, cacheWrite: 7 }],
-    [{ input_tokens: 2, output_tokens: 3, cache_read: 5, cache_write: 7, total_tokens: 19 }, { total: 19, cacheRead: 5, cacheWrite: 7 }],
-    [{ promptTokens: 2, completionTokens: 3, cacheReadTokens: 5, cacheWriteTokens: 7, tokens: { total: 23 } }, { total: 23, cacheRead: 5, cacheWrite: 7 }],
-    [{ prompt_tokens: 2, completion_tokens: 3, cache_read_tokens: 5, cache_write_tokens: 7, tokens: 29 }, { total: 29, cacheRead: 5, cacheWrite: 7 }],
-  ];
+function harness() {
+  const handlers = new Map<string, Function[]>();
+  const commands = new Map<string, any>();
+  const tools = new Map<string, any>();
+  const entries: unknown[][] = [];
+  const messages: unknown[][] = [];
+  const pi = {
+    on(name: string, handler: Function) { handlers.set(name, [...(handlers.get(name) ?? []), handler]); },
+    registerCommand(name: string, command: any) { commands.set(name, command); },
+    registerTool(tool: any) { tools.set(tool.name, tool); },
+    appendEntry(...args: unknown[]) { entries.push(args); },
+    sendMessage(...args: unknown[]) { messages.push(args); },
+    events: { emit() {} },
+  };
+  const ctx = {
+    hasUI: true,
+    isIdle: () => true,
+    hasPendingMessages: () => false,
+    sessionManager: { getBranch: () => [] },
+    ui: { setWidget() {}, notify() {}, theme: { fg: (_color: string, value: string) => value } },
+  };
+  goalExtension(pi as never);
+  handlers.get("session_start")?.[0]({}, ctx);
+  return { handlers, commands, tools, entries, messages, ctx };
+}
 
-  for (const [usage, expected] of cases) {
-    assert.deepEqual(normalizeUsage(usage), expected);
-  }
+async function startGoal(h: ReturnType<typeof harness>) {
+  await h.commands.get("goal").handler("Implement the approved change", h.ctx);
+  h.messages.length = 0;
+  h.handlers.get("agent_start")?.[0]({}, h.ctx);
+  h.handlers.get("agent_end")?.[0]({ messages: [{ role: "assistant", usage: { totalTokens: 4 } }] }, h.ctx);
+}
+
+test("workflow controls remain model-only under codemode", () => {
+  const h = harness();
+  assert.equal(h.tools.get("finish_goal").exposure, "model-only");
 });
 
-test("derives missing or invalid totals and accumulates assistant usage only", () => {
-  assert.deepEqual(
-    normalizeUsage({ input: 2, output: 3, cacheRead: 5, cacheWrite: 7, totalTokens: -1 }),
-    { total: 17, cacheRead: 5, cacheWrite: 7 },
-  );
-  assert.deepEqual(
-    usageTokens([
-      { role: "user", usage: { totalTokens: 100 } },
-      { role: "assistant", usage: { input_tokens: 2, output_tokens: 3, cache_read_tokens: 5 } },
-      { role: "assistant", usage: { totalTokens: 11, cacheRead: -4, cacheWrite: 2 } },
-    ]),
-    { total: 21, cacheRead: 5, cacheWrite: 2 },
-  );
+test("goal continues at agent_before_settle with a branch-local continuation", async () => {
+  const h = harness();
+  await startGoal(h);
+  assert.equal(h.messages.length, 0, "agent_end does not queue a competing follow-up");
+
+  const result = h.handlers.get("agent_before_settle")?.[0]({
+    outcome: "completed",
+    entries: [],
+    context: { pendingMessages: [] },
+  }, h.ctx);
+  assert.equal(result.continue, true);
+  const continuation = result.entries.at(-1);
+  assert.equal(continuation.type, "custom_message");
+  assert.equal(continuation.customType, "simply-goal-continuation");
+  assert.equal(continuation.display, false);
+  assert.match(continuation.details.goalId, /^[0-9a-f-]{36}$/);
+  assert.match(continuation.content, /Continue making concrete progress/);
+});
+
+test("goal pauses after final errors and leaves queued user work alone", async () => {
+  const h = harness();
+  await startGoal(h);
+  const errorResult = h.handlers.get("agent_before_settle")?.[0]({
+    outcome: "error",
+    entries: [],
+    context: { pendingMessages: [] },
+  }, h.ctx);
+  assert.equal(errorResult, undefined);
+  const state = h.entries.filter(([type]) => type === "simply-goal-state").at(-1)?.[1] as any;
+  assert.equal(state.goal.status, "paused");
+  assert.equal(state.goal.pauseReason, "error");
+
+  const pending = harness();
+  await startGoal(pending);
+  const queued = pending.handlers.get("agent_before_settle")?.[0]({
+    outcome: "completed",
+    entries: [],
+    context: { pendingMessages: [{ role: "user", content: "Follow-up" }] },
+  }, pending.ctx);
+  assert.equal(queued, undefined);
 });

@@ -42,6 +42,21 @@ session_query({
 })
 ```
 
+## Codemode batching
+
+`session_query` declares read-only annotations and structured output:
+`{ status, sessionPath, question, answer, messageCount, truncated, error? }`.
+Status is `ok`, `empty`, `error`, or `cancelled`. Direct calls still show the
+answer as text. Failure/cancellation results are marked as errors, and model
+usage is returned on both successful and failed responses for Pi accounting.
+Canonical path checks prevent symlink escapes from the sessions root.
+
+Discover and select relevant sessions first; then batch at most three independent
+questions with `Promise.allSettled`. Each query consumes secondary-model quota
+and sends the selected transcript to the active model provider. Do not bulk-query
+every discovery hit. Keep answer provenance (`sessionPath`) and inspect status
+and truncation flags. See [batching examples](../../docs/codemode-batching.md).
+
 ## Requirements
 
 - Pi with an active model (the current model answers `session_query`).

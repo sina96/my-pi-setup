@@ -435,6 +435,18 @@ export default function permissionGate(pi: ExtensionAPI) {
     if (toolName !== "bash") {
       const { concerns, info } = pathConcernsForTool(toolName, input);
       for (const message of info) ctx.ui.notify(message, "info");
+
+      if (toolName.startsWith("mcp__")) {
+        const tool = pi.getAllTools().find((candidate) => candidate.name === toolName);
+        // An explicit read-only hint avoids interrupting safe lookups. MCP
+        // annotations are unverified; missing/ambiguous hints fail closed.
+        if (tool?.annotations?.readOnlyHint === true && tool.annotations.destructiveHint !== true) return;
+        concerns.push({
+          label: "MCP tool call requires approval",
+          detail: `${toolName} with ${Object.keys(input).join(", ") || "no arguments"}`,
+          severity: "risky",
+        });
+      }
       if (concerns.length === 0) return;
 
       const detail = concerns.map((concern) => concern.detail).join(", ");

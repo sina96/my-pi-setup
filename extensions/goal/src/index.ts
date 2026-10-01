@@ -251,9 +251,8 @@ export default function goalExtension(pi: ExtensionAPI) {
     goalAtAgentStart = goal?.status === "active" ? goal.id : undefined;
   });
 
-  pi.on("agent_end", async (event, ctx) => {
+  pi.on("agent_end", (event, ctx) => {
     if (!goal || goalAtAgentStart !== goal.id) return;
-    goalAtAgentStart = undefined;
     accountTime();
     const usage = usageTokens(event.messages);
     goal.tokensUsed += usage.total;
@@ -261,17 +260,18 @@ export default function goalExtension(pi: ExtensionAPI) {
     goal.cacheWriteTokens = (goal.cacheWriteTokens ?? 0) + usage.cacheWrite;
     goal.totalTurns += 1;
     goal.batchTurns += 1;
+    persist();
+    publish(ctx);
+  });
 
-    if (goal.status !== "active") {
-      persist();
-      publish(ctx);
-      return;
-    }
+  pi.on("agent_before_settle", (event, ctx) => {
+    if (!goal || goalAtAgentStart !== goal.id) return;
+    goalAtAgentStart = undefined;
+    if (goal.status !== "active") return;
 
-    const assistant = [...event.messages].reverse().find((message) => message.role === "assistant") as { stopReason?: string } | undefined;
-    if (assistant?.stopReason === "aborted" || assistant?.stopReason === "error") {
-      setStatus("paused", ctx, assistant.stopReason);
-      show(`Goal paused after the turn ${assistant.stopReason}.\n\n${summary()}`);
+    if (event.outcome === "aborted" || event.outcome === "error") {
+      setStatus("paused", ctx, event.outcome);
+      show(`Goal paused after the turn ${event.outcome}.\n\n${summary()}`);
       return;
     }
     if (goal.batchTurns >= goal.maxTurns) {
@@ -279,10 +279,21 @@ export default function goalExtension(pi: ExtensionAPI) {
       show(`Goal paused at the automatic turn limit. Review progress before resuming.\n\n${summary()}`);
       return;
     }
+    if (event.context.pendingMessages.length > 0) return;
 
-    persist();
-    publish(ctx);
-    queue(ctx);
+    return {
+      entries: [
+        ...event.entries,
+        {
+          type: "custom_message" as const,
+          customType: CONTINUATION_TYPE,
+          content: "Continue making concrete progress toward the active goal. Reuse existing evidence and inspect only state that may be missing or changed.",
+          display: false,
+          details: { goalId: goal.id },
+        },
+      ],
+      continue: true,
+    };
   });
 
   pi.on("context", (event) => {
@@ -307,6 +318,7 @@ export default function goalExtension(pi: ExtensionAPI) {
     name: "finish_goal",
     label: "Finish Goal",
     description: "Only when a /goal is active: mark it complete after requirement-by-requirement verification, or blocked when user input/external change is required. Do not call this merely because a task list is complete.",
+    exposure: "model-only",
     parameters: Type.Object({
       status: Type.Union([Type.Literal("complete"), Type.Literal("blocked")]),
       report: Type.String({ description: "Concise verification evidence, or the exact blocker and required next action" }),

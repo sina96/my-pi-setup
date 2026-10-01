@@ -123,11 +123,28 @@ function countExtensions(pi: ExtensionAPI, cwd: string): number {
   return labels.size;
 }
 
-function countMcpServers(): number {
-  const config = readJson(join(homedir(), ".pi", "agent", "configs", "mcp.json"));
-  return config?.mcpServers && typeof config.mcpServers === "object"
-    ? Object.keys(config.mcpServers).length
-    : 0;
+export function countMcpServers(
+  pi: ExtensionAPI,
+  ctx: ExtensionContext,
+  agentDir = join(homedir(), ".pi", "agent"),
+): number {
+  const globalServers = readJson(join(agentDir, "mcp.json"))?.mcpServers;
+  const servers = new Map<string, unknown>();
+  if (globalServers && typeof globalServers === "object" && !Array.isArray(globalServers)) {
+    for (const [name, config] of Object.entries(globalServers)) servers.set(name, config);
+  }
+
+  if (ctx.isProjectTrusted()) {
+    const projectServers = readJson(join(ctx.cwd, ".pi", "mcp.json"))?.mcpServers;
+    if (projectServers && typeof projectServers === "object" && !Array.isArray(projectServers)) {
+      for (const [name, config] of Object.entries(projectServers)) servers.set(name, config);
+    }
+  }
+
+  for (const registered of pi.getMcpServers()) {
+    if (!servers.has(registered.name)) servers.set(registered.name, registered.config);
+  }
+  return servers.size;
 }
 
 export function discoverCounts(pi: ExtensionAPI, ctx: ExtensionContext): StartupCounts {
@@ -138,6 +155,6 @@ export function discoverCounts(pi: ExtensionAPI, ctx: ExtensionContext): Startup
     extensions: countExtensions(pi, ctx.cwd),
     skills: new Set(commands.filter((command) => command.source === "skill").map((command) => command.name)).size,
     prompts: new Set(commands.filter((command) => command.source === "prompt").map((command) => command.name)).size,
-    mcpServers: countMcpServers(),
+    mcpServers: countMcpServers(pi, ctx),
   };
 }

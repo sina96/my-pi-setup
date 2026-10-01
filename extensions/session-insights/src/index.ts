@@ -52,8 +52,6 @@ export default function sessionInsights(pi: ExtensionAPI) {
         overlayOptions: {
           anchor: "center",
           width: "60%",
-          minWidth: 48,
-          maxWidth: 72,
           margin: 2,
         },
       },
@@ -173,8 +171,6 @@ export default function sessionInsights(pi: ExtensionAPI) {
           overlayOptions: {
             anchor: "center",
             width: "94%",
-            minWidth: 76,
-            maxWidth: 120,
             maxHeight: "92%",
             margin: 1,
           },

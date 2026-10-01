@@ -42,6 +42,11 @@ async function execute(h: ReturnType<typeof harness>, params: Record<string, unk
   return h.tools.get("task_list").execute("call", params, undefined, undefined, h.ctx);
 }
 
+test("task_list stays directly callable rather than being nested in codemode", () => {
+  const h = harness();
+  assert.equal(h.tools.get("task_list").exposure, "model-only");
+});
+
 test("set, update, and list maintain one active task", async () => {
   const h = harness();
   await execute(h, { action: "set", tasks: ["Inspect", "Implement", "Test"] });

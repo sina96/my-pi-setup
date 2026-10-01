@@ -9,18 +9,24 @@ It never invokes Starship or any other subprocess.
 **Balanced** (default):
 
 ```text
-my-pi-setup on  add-model-thinking-etc via  v22.20.0     openai-codex → GPT-5.6 Terra ◆ medium  0% ↑0/↓272k $0.000
+ my-pi-setup on  add-model-thinking-etc via  v22.20.0     openai-codex → GPT-5.6 Terra ◆ medium  codemode⚡  0% ↑0/↓272k $0.000
 ```
 
 **Minimal**:
 
 ```text
-my-pi-setup  add-model-thinking-etc     GPT-5.6 Terra ◆ medium  0% $0.000
+ my-pi-setup  add-model-thinking-etc     GPT-5.6 Terra ◆ medium  codemode:off  0% $0.000
 ```
 
 The footer reads model and thinking state directly from Pi. `/thinking` and
 Shift+Tab update the displayed level immediately; it supports `off`,
 `minimal`, `low`, `medium`, `high`, `xhigh`, and `max`.
+
+The folder glyph requires a Nerd Font, like the existing Git/runtime icons.
+`codemode⚡` means the codemode tool is active (`on` or `only` presentation);
+`codemode:off` means it is not active. The indicator reads the live loadout on
+every redraw, including MCP activation and session tool changes. It does not
+enable codemode or claim that scripts are restricted to read-only actions.
 
 ## Controls
 

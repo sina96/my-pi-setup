@@ -1,18 +1,11 @@
 import { StringEnum } from "@earendil-works/pi-ai";
-import {
-  DEFAULT_MAX_BYTES,
-  DEFAULT_MAX_LINES,
-  formatSize,
-  truncateHead,
-  type ExtensionAPI,
-} from "@earendil-works/pi-coding-agent";
+import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { Text } from "@earendil-works/pi-tui";
 import { constants, accessSync } from "node:fs";
-import { mkdtemp, writeFile } from "node:fs/promises";
 import { delimiter, join } from "node:path";
 import { spawn } from "node:child_process";
-import { tmpdir } from "node:os";
 import { Type } from "typebox";
+import { formatSearchResult, parseRipgrep, SearchOutputSchema } from "./results.ts";
 
 const FILE_CANDIDATE_LIMIT = 20_000;
 const DEFAULT_LIMIT = 100;
@@ -54,38 +47,6 @@ function findExecutable(name: ToolName): string | undefined {
 function normalizePath(path: string | undefined): string {
   if (!path) return ".";
   return path.startsWith("@") ? path.slice(1) : path;
-}
-
-function takeLines(output: string, limit: number): string {
-  return output.split("\n").filter(Boolean).slice(0, limit).join("\n");
-}
-
-async function formatResult(
-  output: string,
-  engine: string,
-): Promise<{ text: string; details: SearchDetails }> {
-  const normalized = output.trimEnd();
-  const resultCount = normalized ? normalized.split("\n").length : 0;
-  const truncation = truncateHead(normalized, {
-    maxLines: DEFAULT_MAX_LINES,
-    maxBytes: DEFAULT_MAX_BYTES,
-  });
-  const details: SearchDetails = {
-    engine,
-    resultCount,
-    truncated: truncation.truncated,
-  };
-  let text = truncation.content;
-
-  if (truncation.truncated) {
-    const directory = await mkdtemp(join(tmpdir(), "pi-simply-search-"));
-    const fullOutputPath = join(directory, "output.txt");
-    await writeFile(fullOutputPath, normalized, "utf8");
-    details.fullOutputPath = fullOutputPath;
-    text += `\n\n[Output truncated to ${DEFAULT_MAX_LINES} lines or ${formatSize(DEFAULT_MAX_BYTES)}. Full output: ${fullOutputPath}]`;
-  }
-
-  return { text, details };
 }
 
 function runFilter(
@@ -157,6 +118,8 @@ export default function simplyFileSearch(pi: ExtensionAPI) {
     pi.registerTool({
       name: "simply_find",
       label: "fd",
+      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+      outputSchema: SearchOutputSchema,
       description:
         "Find files with fd. When fzf is available, non-empty queries are fuzzy-ranked through fzf. Prefer this over the built-in find tool; fall back to find if this tool is unavailable or errors. Results are limited to 500 entries and 50KB.",
       promptSnippet:
@@ -164,6 +127,7 @@ export default function simplyFileSearch(pi: ExtensionAPI) {
       promptGuidelines: [
         "Prefer simply_find over the built-in find tool for file discovery when simply_find is available; use find as the fallback.",
         "Avoid invoking find inside bash when simply_find is available. If file discovery must stay inside a compound shell command, use fd directly instead.",
+        "When codemode is available, batch independent read-only searches with Promise.allSettled and return only relevant structured files/matches. Dependent searches must wait for discovery results.",
       ],
       parameters: Type.Object({
         query: Type.Optional(
@@ -219,7 +183,7 @@ export default function simplyFileSearch(pi: ExtensionAPI) {
           args.push("--extension", params.extension.replace(/^\./, ""));
         args.push(
           "--max-results",
-          String(useFzf ? FILE_CANDIDATE_LIMIT : limit),
+          String(useFzf ? FILE_CANDIDATE_LIMIT + 1 : limit + 1),
         );
         args.push(useFzf ? "." : params.query?.trim() || ".", path);
 
@@ -252,17 +216,8 @@ export default function simplyFileSearch(pi: ExtensionAPI) {
           engine = "fzf";
         }
 
-        output = takeLines(output, limit);
-        if (!output)
-          return {
-            content: [{ type: "text", text: "No files found" }],
-            details: { engine, resultCount: 0, truncated: false },
-          };
-        const formatted = await formatResult(output, engine);
-        return {
-          content: [{ type: "text", text: formatted.text }],
-          details: formatted.details,
-        };
+        const candidateLimitReached = useFzf && found.stdout.split("\n").filter(Boolean).length > FILE_CANDIDATE_LIMIT;
+        return formatSearchResult(output.split("\n").filter(Boolean), engine, limit, candidateLimitReached);
       },
       renderCall(args, theme) {
         const query = args.query ? ` “${args.query}”` : "";
@@ -296,12 +251,15 @@ export default function simplyFileSearch(pi: ExtensionAPI) {
     pi.registerTool({
       name: "simply_grep",
       label: "rg",
+      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+      outputSchema: SearchOutputSchema,
       description:
         "Search file contents with ripgrep. Prefer this over the built-in grep tool; fall back to grep if this tool is unavailable or errors. Results are limited to 500 lines and 50KB.",
       promptSnippet: "Search file contents quickly with ripgrep",
       promptGuidelines: [
         "Prefer simply_grep over the built-in grep tool for content search when simply_grep is available; use grep as the fallback.",
         "Avoid invoking grep inside bash when simply_grep is available. If content search must stay inside a compound shell command, use rg directly instead.",
+        "Codemode scripts receive structured matches (kind, path, line, byte column, text) and limit flags. Batch independent read-only searches and filter before returning text; match arrays can also contain context lines.",
       ],
       parameters: Type.Object({
         pattern: Type.String({
@@ -345,9 +303,7 @@ export default function simplyFileSearch(pi: ExtensionAPI) {
       async execute(_id, params, signal, _update, ctx) {
         const limit = params.limit ?? DEFAULT_LIMIT;
         const args = [
-          "--line-number",
-          "--column",
-          "--no-heading",
+          "--json",
           "--color",
           "never",
           "--glob",
@@ -367,27 +323,13 @@ export default function simplyFileSearch(pi: ExtensionAPI) {
           signal,
           timeout: COMMAND_TIMEOUT_MS,
         });
-        if (searched.code === 1)
-          return {
-            content: [{ type: "text", text: "No matches found" }],
-            details: { engine: "rg", resultCount: 0, truncated: false },
-          };
+        if (searched.code === 1) return formatSearchResult([], "rg", limit);
         if (searched.code !== 0)
           throw new Error(
             searched.stderr.trim() || `rg exited with code ${searched.code}`,
           );
 
-        const output = takeLines(searched.stdout, limit);
-        if (!output)
-          return {
-            content: [{ type: "text", text: "No matches found" }],
-            details: { engine: "rg", resultCount: 0, truncated: false },
-          };
-        const formatted = await formatResult(output, "rg");
-        return {
-          content: [{ type: "text", text: formatted.text }],
-          details: formatted.details,
-        };
+        return formatSearchResult(parseRipgrep(searched.stdout), "rg", limit);
       },
       renderCall(args, theme) {
         const path = args.path ? ` in ${args.path}` : "";
