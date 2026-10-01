@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { ExtensionContext, Theme } from "@earendil-works/pi-coding-agent";
 import { visibleWidth } from "@earendil-works/pi-tui";
-import minimalStatusline, { detectRuntimeVersions, loadSettings, renderStatusline, saveSettings, summarizeUsage } from "./src/index.ts";
+import minimalStatusline, { detectRuntimeVersions, getCodemodeState, loadSettings, renderStatusline, saveSettings, summarizeUsage } from "./src/index.ts";
 
 const theme = {
   fg: (_color: string, text: string) => text,
@@ -51,7 +51,8 @@ test("balanced footer includes native model, thinking, token, and cost informati
     200,
   );
 
-  assert.match(line, /my-pi-setup on  add-model-thinking-etc via  v22\.20\.0/);
+  assert.match(line, / my-pi-setup on  add-model-thinking-etc via  v22\.20\.0/);
+  assert.match(line, /codemode:off/);
   assert.match(line, /openai-codex → GPT-5\.6 Terra/);
   assert.match(line, /◆ medium/);
   assert.match(line, /0%  ↑1\.3k\/↓36  \$0\.020/);
@@ -69,7 +70,7 @@ test("minimal footer omits provider, Node, and token totals but preserves thinki
   );
 
   assert.doesNotMatch(line, /openai-codex|v22\.20\.0|↑/);
-  assert.match(line, /GPT-5\.6 Terra  ◆ max  0%  \$0\.020/);
+  assert.match(line, /GPT-5\.6 Terra  ◆ max  codemode:off  0%  \$0\.020/);
 });
 
 test("footer prioritizes right-side Pi state within narrow terminal widths", () => {
@@ -151,13 +152,33 @@ test("density settings persist with a balanced fallback", () => {
   }
 });
 
-test("thinking updates trigger a footer redraw", async () => {
+test("codemode reflects the actual loadout, including only mode", () => {
+  let active: string[] = [];
+  const pi = { getActiveTools: () => active, getSettings: () => ({ codemode: { mode: "only" as const } }) };
+  assert.equal(getCodemodeState(pi), "off");
+  active = ["codemode"];
+  assert.equal(getCodemodeState(pi), "only");
+  assert.equal(getCodemodeState({ ...pi, getSettings: () => ({}) }), "on");
+
+  for (const density of ["minimal", "balanced"] as const) {
+    const snapshot = { project: "project", runtimes: [], thinkingLevel: "high", usage: { input: 0, output: 0, cost: 0 }, codemode: "on" as const };
+    assert.match(renderStatusline(theme, context(), snapshot, null, density, 200), / project.*codemode⚡/);
+    for (let width = 1; width <= 100; width++) {
+      assert.ok(visibleWidth(renderStatusline(theme, context(), snapshot, null, density, width)) <= width);
+    }
+  }
+});
+
+test("thinking updates redraw and codemode changes appear on the next render", async () => {
   const handlers = new Map<string, Function[]>();
   let footerFactory: ((...args: unknown[]) => { render(width: number): string[] }) | undefined;
+  let active: string[] = [];
   const pi = {
     on(name: string, handler: Function) { handlers.set(name, [...(handlers.get(name) ?? []), handler]); },
     registerCommand() {},
     getThinkingLevel: () => "medium",
+    getActiveTools: () => active,
+    getSettings: () => ({}),
   };
   minimalStatusline(pi as never);
 
@@ -177,5 +198,9 @@ test("thinking updates trigger a footer redraw", async () => {
   await handlers.get("thinking_level_select")?.[0]({ level: "max" }, ctx);
 
   assert.equal(renders, 1);
-  assert.match(footer.render(200)[0]!, /◆ max/);
+  assert.match(footer.render(200)[0]!, /◆ max.*codemode:off/);
+  active = ["codemode"];
+  assert.match(footer.render(200)[0]!, /codemode⚡/);
+  active = [];
+  assert.match(footer.render(200)[0]!, /codemode:off/);
 });

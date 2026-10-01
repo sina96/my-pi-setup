@@ -273,6 +273,7 @@ export default function taskListExtension(pi: ExtensionAPI): void {
     name: TOOL_NAME,
     label: "Task List",
     description: "Create and maintain the visible task list for the current multi-step job. Actions: set (replace with an ordered string list), add (text), update (id plus status and/or text), list, clear.",
+    exposure: "model-only",
     promptSnippet: "Track multi-step work in a task list that is visible above the editor",
     promptGuidelines: [
       "Use task_list for non-trivial work with 3 or more concrete steps; call set before implementation so the user can see the plan.",

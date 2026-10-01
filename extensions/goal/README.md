@@ -49,12 +49,12 @@ state change. Ordinary difficulty or incomplete work remains active.
 - Goal state, counters, and status are appended to the Pi session and follow
   session branches.
 - A themed widget shows goal state, current batch turns, and processed tokens.
-- Each completed agent run counts as one turn.
-- Errors and aborts pause the goal.
+- Each completed agent run counts as one turn. Automatic continuation is decided at Pi 1.0's `agent_before_settle` boundary, after retries, recovery, and queued work are resolved.
+- Final errors and aborts pause the goal.
 - Permission-gate dialogs still apply during autonomous turns.
 - PLAN/EXECUTE and REVIEW modes refuse to overlap with an active goal; pause the
   goal first.
-- Hidden continuation messages are deduplicated from model context.
+- Branch-local continuation messages are deduplicated from model context.
 - Goal instructions stay byte-stable across automatic turns so provider prompt
   caches are not invalidated by changing turn counters.
 - Continuations tell the agent to reuse existing evidence and inspect only state

@@ -23,7 +23,15 @@ export interface RuntimeVersion {
   version: string;
 }
 
+export type CodemodeState = "off" | "on" | "only";
+
+export function getCodemodeState(pi: Pick<ExtensionAPI, "getActiveTools" | "getSettings">): CodemodeState {
+  if (!pi.getActiveTools().includes("codemode")) return "off";
+  return pi.getSettings().codemode?.mode === "only" ? "only" : "on";
+}
+
 interface StatuslineSnapshot {
+  codemode?: CodemodeState;
   project: string;
   runtimes: RuntimeVersion[];
   thinkingLevel: string;
@@ -138,7 +146,7 @@ export function summarizeUsage(ctx: Pick<ExtensionContext, "sessionManager">): U
       usage = entry.message.usage;
     } else if (entry.type === "message" && entry.message.role === "toolResult") {
       usage = entry.message.usage;
-    } else if (entry.type === "compaction" || entry.type === "branch_summary") {
+    } else if (entry.type === "compaction" || entry.type === "branch_summary" || entry.type === "usage") {
       usage = entry.usage;
     }
     if (!usage) continue;
@@ -167,7 +175,7 @@ function thinkingSegment(theme: Theme, level: string): string {
 }
 
 function leftSegment(theme: Theme, snapshot: StatuslineSnapshot, branch: string | null, density: Density): string {
-  const parts = [theme.bold(theme.fg("text", snapshot.project))];
+  const parts = [theme.fg("accent", " ") + theme.bold(theme.fg("text", snapshot.project))];
   if (branch) parts.push(theme.fg("dim", "on ") + theme.fg("accent", ` ${branch}`));
   if (density === "balanced") {
     for (const runtime of snapshot.runtimes) {
@@ -186,10 +194,14 @@ function rightSegment(
 ): string {
   const parts: string[] = [];
   if (ctx.model) {
-    const model = theme.bold(theme.fg("accent", ctx.model.name));
+    const modelName = compact ? truncateToWidth(ctx.model.name, 6, "…") : ctx.model.name;
+    const model = theme.bold(theme.fg("accent", modelName));
     parts.push(density === "balanced" && !compact ? theme.fg("dim", `${ctx.model.provider} → `) + model : model);
   }
   parts.push(thinkingSegment(theme, snapshot.thinkingLevel));
+  const codemode = snapshot.codemode ?? "off";
+  const codemodeLabel = codemode === "off" ? "codemode:off" : "codemode⚡";
+  parts.push(theme.fg(codemode === "off" ? "dim" : "success", codemodeLabel));
   parts.push(contextSegment(theme, ctx));
   if (density === "balanced" && !compact) {
     parts.push(theme.fg("accent", `↑${formatTokens(snapshot.usage.input)}`) + theme.fg("dim", "/") + theme.fg("success", `↓${formatTokens(snapshot.usage.output)}`));
@@ -282,7 +294,10 @@ export default function minimalStatusline(pi: ExtensionAPI): void {
         },
         invalidate() {},
         render(width: number): string[] {
-          return [renderStatusline(theme, ctx, snapshot, footerData.getGitBranch(), settings.density, width)];
+          // Read the active loadout on each redraw: configured defaults alone
+          // cannot reflect MCP activation or tools disabled during this session.
+          const live = { ...snapshot, codemode: getCodemodeState(pi) };
+          return [renderStatusline(theme, ctx, live, footerData.getGitBranch(), settings.density, width)];
         },
       };
     });

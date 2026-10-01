@@ -39,7 +39,7 @@ and then hides automatically without clearing the persisted task state. Running
 /tasks clear   Clear the list after confirmation
 ```
 
-The model-facing tool supports `set`, `add`, `update`, `list`, and `clear`.
+The model-facing tool supports `set`, `add`, `update`, `list`, and `clear`. It remains a direct model-only tool rather than a codemode-callable tool: Pi does not persist nested tool result snapshots, and task state must survive resume and branching.
 Mutation results return a compact progress summary instead of repeating every
 task into model context; `list` returns the full text only when needed.
 

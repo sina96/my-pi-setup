@@ -89,6 +89,21 @@ export default function herdrBlockedState(pi: ExtensionAPI): void {
     publish();
   });
 
+  // Pi 1.0 emits these around all blocking UI prompts, including native MCP
+  // and permission dialogs. Legacy custom events can overlap; the label stack
+  // keeps Herdr blocked until the final prompt is dismissed.
+  pi.on("ui_prompt_start", (event) => {
+    const title = typeof event.title === "string" && event.title.trim()
+      ? `: ${event.title.trim()}`
+      : "";
+    labels.push(`Waiting for ${event.kind} input${title}`);
+    publish();
+  });
+  pi.on("ui_prompt_end", () => {
+    if (labels.length > 0) labels.pop();
+    publish();
+  });
+
   pi.on("session_start", (_event, ctx) => {
     const file = ctx.sessionManager.getSessionFile();
     sessionPath =

@@ -18,6 +18,23 @@ missing `fzf` falls back to normal `fd` matching.
 Outputs are bounded, truncated at Pi's standard 2,000-line/50KB limit, and saved
 to a temporary file if byte truncation is necessary.
 
+## Codemode and structured results
+
+Both tools declare output schemas and read-only annotations. Direct calls retain
+human-readable text; codemode scripts receive `{ engine, files, matches,
+resultCount, truncated, limitReached, fullOutputPath? }` instead.
+
+`simply_find` fills `files`. `simply_grep` fills `matches` with `{ kind, path,
+line, column, text }`; `kind` is `match` or `context`, and `column` is a 1-based
+byte offset for matches (0 for context). Ripgrep JSON keeps colon-containing and
+Unicode paths unambiguous. Both JSON and text are bounded under 50KB.
+
+Use `Promise.allSettled` for independent read-only searches and return only
+relevant fields. `limitReached` includes a capped fuzzy candidate scan;
+`truncated` also covers byte limits. A full-output file contains selected results
+within the requested limit, not all possible matches. See
+[read-only batching examples](../../docs/codemode-batching.md).
+
 ## Requirements
 
 Install any combination you want:

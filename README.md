@@ -81,6 +81,15 @@ Optional upstream packages— not loaded by this setup but can be used in need:
 
 Use `/theme` when the theme picker extension is active, or select a theme through Pi's settings.
 
+## Codemode batching
+
+Pi 1.0's built-in codemode can batch independent read-only searches and selected
+session queries. Search/recall tools expose structured results; workflow controls
+remain direct/model-only. The footer shows `codemode⚡` when active and
+`codemode:off` when inactive. See [setup and batching examples](docs/codemode-batching.md),
+including how to combine a local search with the native-web-search skill.
+Codemode remains opt-in and is not a read-only sandbox.
+
 ## Install and Update
 
 Install the complete package globally from GitHub:

@@ -116,14 +116,26 @@ async function parseSession(path: string, signal?: AbortSignal): Promise<Session
         currentModel = modelName(item.provider, item.modelId ?? item.model) ?? currentModel;
         continue;
       }
+      if (item.type === "usage" || item.type === "compaction" || item.type === "branch_summary") {
+        addUsage(record.usage, item.usage);
+        continue;
+      }
       if (item.type !== "message") continue;
 
       const message = item.message ?? item;
       if (message.role === "user") record.userMessages += 1;
       if (message.role === "toolResult") {
+        addUsage(record.usage, message.usage);
         record.toolCalls += 1;
         const tool = typeof message.toolName === "string" ? message.toolName : "unknown";
         record.tools.set(tool, (record.tools.get(tool) ?? 0) + 1);
+        if (Array.isArray(message.nestedCalls)) {
+          for (const nested of message.nestedCalls) {
+            if (typeof nested?.name !== "string") continue;
+            record.toolCalls += 1;
+            record.tools.set(nested.name, (record.tools.get(nested.name) ?? 0) + 1);
+          }
+        }
       }
       if (message.role !== "assistant") continue;
 

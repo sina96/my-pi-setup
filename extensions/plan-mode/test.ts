@@ -1,6 +1,20 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { isSafeBash } from "./src/index.ts";
+import planMode, { isSafeBash } from "./src/index.ts";
+
+test("plan completion is kept out of nested codemode execution", () => {
+  let registered: any;
+  planMode({
+    registerTool(tool: any) { registered = tool; },
+    on() {},
+    registerCommand() {},
+    registerShortcut() {},
+    registerFlag() {},
+    appendEntry() {},
+    events: { emit() {} },
+  } as never);
+  assert.equal(registered.exposure, "model-only");
+});
 
 test("allows read-only Git inspection and rejects write-capable output options", () => {
   assert.equal(isSafeBash("git status --short"), true);

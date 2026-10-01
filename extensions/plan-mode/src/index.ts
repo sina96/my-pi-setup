@@ -149,6 +149,7 @@ export default function planMode(pi: ExtensionAPI) {
     name: "plan_complete",
     label: "Plan Complete",
     description: "Finish the active approved plan. Call only in EXECUTE mode after every plan step and validation are complete.",
+    exposure: "model-only",
     parameters: Type.Object({}),
     async execute(_id, _params, _signal, _update, ctx) {
       if (state.mode !== "execute") throw new Error("plan_complete is only available in execute mode");

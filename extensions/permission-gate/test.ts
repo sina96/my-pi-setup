@@ -135,7 +135,10 @@ test("extracts explicit sensitive Bash paths", () => {
   );
 });
 
-function harness(select: (...args: unknown[]) => Promise<string | undefined>) {
+function harness(
+  select: (...args: unknown[]) => Promise<string | undefined>,
+  toolInfo: unknown[] = [],
+) {
   const handlers = new Map<string, Function[]>();
   const emitted: unknown[][] = [];
   permissionGate({
@@ -143,6 +146,7 @@ function harness(select: (...args: unknown[]) => Promise<string | undefined>) {
       handlers.set(name, [...(handlers.get(name) ?? []), handler]);
     },
     registerCommand() {},
+    getAllTools() { return toolInfo; },
     appendEntry() {},
     events: {
       emit(...args: unknown[]) {
@@ -251,6 +255,30 @@ test("headless command and sensitive-path access fail closed", async () => {
   );
   assert.equal(command.block, true);
   assert.equal(path.block, true);
+});
+
+test("unknown or mutating MCP calls require approval, including headless denial", async () => {
+  let prompts = 0;
+  const toolInfo = [{ name: "mcp__docs__delete_page", annotations: { destructiveHint: true } }];
+  const gate = harness(async () => {
+    prompts += 1;
+    return "Allow once";
+  }, toolInfo);
+  const call = { toolName: "mcp__docs__delete_page", input: { pageId: "123" } };
+
+  assert.equal(await gate.call(call, gate.ctx), undefined);
+  assert.equal(prompts, 1);
+  const blocked = await gate.call(call, { ...gate.ctx, hasUI: false });
+  assert.equal(blocked.block, true);
+  assert.match(blocked.reason, /without interactive approval/);
+
+  const readOnly = harness(async () => {
+    throw new Error("read-only MCP tools should not prompt");
+  }, [{ name: "mcp__docs__search", annotations: { readOnlyHint: true } }]);
+  assert.equal(await readOnly.call(
+    { toolName: "mcp__docs__search", input: { query: "test" } },
+    readOnly.ctx,
+  ), undefined);
 });
 
 test("simply_grep hidden searches prompt and preserve Herdr state lifecycle", async () => {
