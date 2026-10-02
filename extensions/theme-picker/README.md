@@ -13,6 +13,7 @@ the repository themes are registered by its root package manifest.
 ```text
 /theme             Open the interactive picker
 /theme dark        Apply a theme directly
+/theme Original Pi Restore native Pi colors and startup header
 ```
 
 The direct command is case-insensitive and supports argument completion.
@@ -34,8 +35,24 @@ Browsing does not call Pi's global `setTheme`, so a large session is not
 recolored and rerendered for every highlighted option. The selected theme is
 applied to the full session only after Enter is pressed.
 
-Selections are persisted as `theme` in `~/.pi/agent/settings.json`. If persistence
-fails, the theme remains active for the current session and a warning is shown.
+Selections are persisted in the agent settings file (by default
+`~/.pi/agent/settings.json`). If persistence fails, the theme and
+header choice remain active for the current session and a warning is shown.
+
+**Original Pi** is a preset, not a theme JSON: it previews/applies the built-in
+`system` palette and asks `pi-startup` to restore the native header. It saves
+`theme: "system"`, `quietStartup: false`, and `piStartupHeader: "builtin"`.
+Restart Pi for the full native startup header and resource listing: if quiet
+startup was `true`, Pi did not create a native header in the current process.
+Your footer/editor customizations are untouched.
+
+Other selections restore the theme-colored pixel-logo dashboard when
+`pi-startup` is loaded, saving `piStartupHeader: "dashboard"` and
+`quietStartup: "header"` to avoid duplicate resource listings next startup.
+Selecting `system` directly remains a palette-only choice with the dashboard.
+Without `pi-startup`, the header preference has no effect. `/settings` and CLI
+palette choices do not change this preference. Canceling the picker changes
+neither colors nor header settings.
 
 ## Why this version is safe to add back
 
