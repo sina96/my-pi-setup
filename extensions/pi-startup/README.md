@@ -7,7 +7,7 @@ It replaces the old `pi-header` extension with a bordered, three-column view:
 
 | Column | Content |
 |---|---|
-| Left | Theme-aware Pi ASCII logo |
+| Left | Upstream Pi pixel-logo silhouette, enlarged 3× and colored with the theme's `accent` |
 | Middle | Counts for models, extensions, skills, MCP servers, prompts, and context files |
 | Right | Current keyboard hints for commands, bash, model/thinking cycling, and tool expansion |
 
@@ -34,8 +34,29 @@ a Nerd Font such as JetBrainsMono Nerd Font Mono.
 
 ## Avoiding duplicate startup information
 
-Set **Quiet startup** to `true` in `/settings`. This hides Pi's native detailed
-resource listing while leaving this custom dashboard visible.
+Set **Quiet startup** to `"header"` in `/settings`. This hides Pi's native detailed
+resource listing while keeping its real header available for restoration. The
+custom dashboard replaces that header. `true` also works for the dashboard, but
+Pi then does not create its native header, so restoring it requires a restart.
+
+## Original Pi preset
+
+With `simply-theme-picker` loaded, select **Original Pi** in `/theme`, or run
+`/theme Original Pi`. This uses Pi's native `system` palette and restores its
+built-in header. It does not change your footer/editor extensions or add an
+animation to the dashboard. The native header retains Pi's own behavior.
+
+The preset saves `theme: "system"`, `quietStartup: false`, and the extension's
+`piStartupHeader: "builtin"` preference in the agent settings file (by default
+`~/.pi/agent/settings.json`). Restart Pi for the complete native
+startup header/resource listing, particularly if quiet startup was previously
+`true`. A theme selected through `/theme` instead saves `piStartupHeader:
+"dashboard"` and `quietStartup: "header"`, restoring this dashboard immediately
+and suppressing duplicate resource listings on the next startup.
+
+`/settings` and CLI theme overrides change colors without changing this header
+preference. Use `/theme` for the combined color/header preset. No upstream source
+patch or duplicate `system` theme JSON is needed.
 
 ## Try without installing
 

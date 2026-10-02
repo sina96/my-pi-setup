@@ -3,14 +3,23 @@ import { visibleWidth } from "@earendil-works/pi-tui";
 import type { StartupCounts } from "./discovery.ts";
 import { center, fit, hasNerdFonts } from "./helpers.ts";
 
-const PI_ART = [
-  "██████╗ ██╗",
-  "██╔══██╗██║",
-  "██████╔╝██║",
-  "██╔═══╝ ██║",
-  "██║     ██║",
-  "╚═╝     ╚═╝",
-];
+// Upstream's 4×4 pixel silhouette, enlarged 3× with half blocks.
+// All occupied pixels use accent: colors follow any selected theme.
+const PI_PIXELS = ["1110", "1010", "1101", "1001"];
+
+export function piPixelLogo(): string[] {
+  const pixels = PI_PIXELS.flatMap((row) =>
+    Array.from({ length: 3 }, () => [...row].map((pixel) => pixel.repeat(3)).join("")),
+  );
+  const lines: string[] = [];
+  for (let row = 0; row < pixels.length; row += 2) {
+    lines.push([...pixels[row]!].map((top, column) => {
+      const bottom = pixels[row + 1]![column];
+      return top === "1" ? (bottom === "1" ? "█" : "▀") : (bottom === "1" ? "▄" : " ");
+    }).join(""));
+  }
+  return lines;
+}
 
 export interface StartupKeys {
   model: string;
@@ -19,7 +28,7 @@ export interface StartupKeys {
 }
 
 function logoColumn(theme: Theme, width: number): string[] {
-  return ["", ...PI_ART.map((line) => center(theme.bold(theme.fg("accent", line)), width)), ""];
+  return ["", ...piPixelLogo().map((line) => center(theme.fg("accent", line), width)), ""];
 }
 
 function countColumn(theme: Theme, counts: StartupCounts): string[] {

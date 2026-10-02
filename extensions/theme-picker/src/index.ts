@@ -4,6 +4,7 @@ import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-a
 import { getAgentDir } from "@earendil-works/pi-coding-agent";
 import { fuzzyFilter } from "@earendil-works/pi-tui";
 import { ThemePreviewPicker } from "./theme-preview-picker.ts";
+import { ORIGINAL_PI, STARTUP_HEADER_EVENT, settingsForChoice, themeNameForChoice } from "./presets.ts";
 
 function saveTheme(name: string): string | undefined {
   const path = join(getAgentDir(), "settings.json");
@@ -15,8 +16,7 @@ function saveTheme(name: string): string | undefined {
         settings = parsed as Record<string, unknown>;
       }
     }
-    settings.theme = name;
-    writeFileSync(path, `${JSON.stringify(settings, null, 2)}\n`, "utf8");
+    writeFileSync(path, `${JSON.stringify(settingsForChoice(settings, name), null, 2)}\n`, "utf8");
     return undefined;
   } catch (error) {
     return error instanceof Error ? error.message : String(error);
@@ -26,26 +26,30 @@ function saveTheme(name: string): string | undefined {
 export default function themePicker(pi: ExtensionAPI) {
   let themeNames: string[] = [];
   let activeTheme: string | undefined;
+  let originalPreset = false;
 
   function refresh(ctx: ExtensionContext): void {
-    themeNames = [...new Set(ctx.ui.getAllThemes().map((theme) => theme.name))]
-      .sort((a, b) => a.localeCompare(b));
-    activeTheme = ctx.ui.theme.name ?? activeTheme;
+    themeNames = [ORIGINAL_PI, ...[...new Set(ctx.ui.getAllThemes().map((theme) => theme.name))]
+      .filter((name) => name !== ORIGINAL_PI).sort((a, b) => a.localeCompare(b))];
+    activeTheme = originalPreset && ctx.ui.theme.name === "system"
+      ? ORIGINAL_PI : ctx.ui.theme.name ?? activeTheme;
   }
 
   function apply(name: string, ctx: ExtensionContext): boolean {
-    const result = ctx.ui.setTheme(name);
+    const result = ctx.ui.setTheme(themeNameForChoice(name));
     if (!result.success) {
       ctx.ui.notify(`Could not apply theme "${name}": ${result.error ?? "unknown error"}`, "error");
       return false;
     }
 
-    activeTheme = ctx.ui.theme.name ?? name;
-    const saveError = saveTheme(activeTheme);
+    originalPreset = name === ORIGINAL_PI;
+    activeTheme = originalPreset ? ORIGINAL_PI : ctx.ui.theme.name ?? name;
+    pi.events.emit(STARTUP_HEADER_EVENT, originalPreset ? "builtin" : "dashboard");
+    const saveError = saveTheme(name);
     if (saveError) {
       ctx.ui.notify(`Theme applied for this session, but could not save it: ${saveError}`, "warning");
     } else {
-      ctx.ui.notify(`Theme "${activeTheme}" applied and saved`, "info");
+      ctx.ui.notify(`Theme "${activeTheme}" applied and saved${originalPreset ? "; restart Pi to fully restore its native startup header and resource listing" : ""}`, "info");
     }
     return true;
   }
@@ -57,14 +61,14 @@ export default function themePicker(pi: ExtensionAPI) {
       return;
     }
 
-    const originalName = ctx.ui.theme.name ?? activeTheme;
+    const originalName = activeTheme ?? ctx.ui.theme.name;
     const selected = await ctx.ui.custom<string | undefined>(
       (tui, _theme, keybindings, done) =>
         new ThemePreviewPicker({
           names: themeNames,
           activeName: originalName,
           initialName: activeTheme,
-          getTheme: (name) => ctx.ui.getTheme(name),
+          getTheme: (name) => ctx.ui.getTheme(themeNameForChoice(name)),
           keybindings,
           onChange: () => tui.requestRender(),
           onDone: done,
@@ -107,6 +111,12 @@ export default function themePicker(pi: ExtensionAPI) {
   });
 
   pi.on("session_start", (_event, ctx) => {
+    try {
+      const settings = JSON.parse(readFileSync(join(getAgentDir(), "settings.json"), "utf8"));
+      originalPreset = settings.piStartupHeader === "builtin" && ctx.ui.theme.name === "system";
+    } catch {
+      originalPreset = false;
+    }
     refresh(ctx);
   });
 }

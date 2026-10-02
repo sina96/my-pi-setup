@@ -1,4 +1,7 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import {
+  getAgentDir,
   keyText,
   type ExtensionAPI,
   type ExtensionContext,
@@ -35,11 +38,11 @@ export default function piStartup(pi: ExtensionAPI) {
     requestRender?.();
   };
 
-  pi.on("session_start", (_event, ctx) => {
-    if (ctx.mode !== "tui") return;
-    activeContext = ctx;
-    counts = discoverCounts(pi, ctx);
-
+  const showHeader = (ctx: ExtensionContext, mode: "builtin" | "dashboard") => {
+    if (mode === "builtin") {
+      ctx.ui.setHeader(undefined);
+      return;
+    }
     const keys: StartupKeys = {
       model: keyText("app.model.cycleForward") || "ctrl+p",
       thinking: keyText("app.thinking.cycle") || "shift+tab",
@@ -59,6 +62,26 @@ export default function piStartup(pi: ExtensionAPI) {
       };
     });
 
+  };
+
+  pi.events.on("pi-startup:header", (mode) => {
+    if (activeContext && (mode === "builtin" || mode === "dashboard")) {
+      showHeader(activeContext, mode);
+    }
+  });
+
+  pi.on("session_start", (_event, ctx) => {
+    if (ctx.mode !== "tui") return;
+    activeContext = ctx;
+    counts = discoverCounts(pi, ctx);
+    let mode: "builtin" | "dashboard" = "dashboard";
+    try {
+      const settings = JSON.parse(readFileSync(join(getAgentDir(), "settings.json"), "utf8"));
+      if (settings.piStartupHeader === "builtin") mode = "builtin";
+    } catch {
+      // Missing settings use the dashboard; Pi reports malformed settings itself.
+    }
+    showHeader(ctx, mode);
     queueMicrotask(() => void refresh(true));
   });
 
